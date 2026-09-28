@@ -1,0 +1,3 @@
+spring:
+  config:
+    import: "optional:file:./.${SPRING_PROFILES_ACTIVE}.env[.properties]"
