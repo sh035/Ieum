@@ -7,4 +7,6 @@ import java.util.UUID
 interface AccountRepository : JpaRepository<Account, UUID> {
 
 	fun existsByEmailAndIsDeletedFalse(email: String): Boolean
+
+	fun findByEmailAndIsDeletedFalse(email: String): Account?
 }

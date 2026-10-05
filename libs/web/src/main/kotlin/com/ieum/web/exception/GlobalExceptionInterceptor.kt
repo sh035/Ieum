@@ -15,11 +15,11 @@ class GlobalExceptionInterceptor {
 
 	@ExceptionHandler(IeumException::class)
 	fun interceptIeumException(e: IeumException): ResponseEntity<ErrorResponse> {
-		log.warn("Ieum exception. status={}, message={}", e.status.value(), e.message)
+		log.warn("Ieum exception. status={}, message={}", e.errorCode.status.value(), e.message)
 
 		return ResponseEntity
-			.status(e.status)
-			.body(ErrorResponse(code = e.status.value(), message = e.message))
+			.status(e.errorCode.status)
+			.body(ErrorResponse(code = e.errorCode.status.value(), message = e.errorCode.message))
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException::class)

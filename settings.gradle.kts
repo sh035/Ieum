@@ -9,6 +9,6 @@ include(
 	"services:expense",
 	"services:notification",
 	"libs:web",
-//	"libs:security",
+	"libs:security",
 //	"libs:events",
 )
