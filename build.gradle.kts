@@ -35,6 +35,10 @@ subprojects {
 	}
 
 	plugins.withId("org.springframework.boot") {
+		tasks.withType<org.springframework.boot.gradle.tasks.run.BootRun> {
+			environment("SPRING_PROFILES_ACTIVE", providers.gradleProperty("env").getOrElse("local"))
+		}
+
 		dependencies {
 			"implementation"("org.springframework.boot:spring-boot-starter-webmvc")
 			"implementation"("org.springframework.boot:spring-boot-starter-actuator")
