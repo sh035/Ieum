@@ -8,7 +8,7 @@ include(
 	"services:shopping",
 	"services:expense",
 	"services:notification",
-//	"libs:web",
+	"libs:web",
 //	"libs:security",
 //	"libs:events",
 )
