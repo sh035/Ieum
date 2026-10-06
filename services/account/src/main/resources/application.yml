@@ -1,3 +1,28 @@
 spring:
   config:
     import: "optional:file:./.${SPRING_PROFILES_ACTIVE}.env[.properties]"
+  application:
+    name: account
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: account
+
+server:
+  port: 8081
+
+jwt:
+  private-key: ${JWT_PRIVATE_KEY}
+  public-key: ${JWT_PUBLIC_KEY}
+  access-token-ttl: ${JWT_ACCESS_TOKEN_TTL}
+  refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL}
