@@ -1,21 +1,22 @@
 package com.ieum.account.repository
 
-import com.ieum.security.jwt.JwtProperties
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Repository
 import java.security.MessageDigest
+import java.time.Duration
 import java.util.HexFormat
 import java.util.UUID
 
 @Repository
 class RefreshTokenRepository(
 	private val redisTemplate: StringRedisTemplate,
-	private val properties: JwtProperties,
+	@Value("\${jwt.refresh-token-ttl}") private val refreshTokenTtl: Duration,
 ) {
 
 	fun issue(accountId: String): String {
 		val token = UUID.randomUUID().toString()
-		redisTemplate.opsForValue().set(key(token), accountId, properties.refreshTokenTtl)
+		redisTemplate.opsForValue().set(key(token), accountId, refreshTokenTtl)
 
 		return token
 	}
