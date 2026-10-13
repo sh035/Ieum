@@ -1,3 +1,21 @@
 spring:
   config:
     import: "optional:file:./.${SPRING_PROFILES_ACTIVE}.env[.properties]"
+  application:
+    name: family
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: family
+
+server:
+  port: 8082
+
+jwt:
+  public-key: ${JWT_PUBLIC_KEY}
