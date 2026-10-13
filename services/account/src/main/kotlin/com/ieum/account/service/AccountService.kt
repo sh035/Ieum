@@ -1,6 +1,5 @@
 package com.ieum.account.service
 
-import com.ieum.account.controller.dto.request.LoginRequest
 import com.ieum.account.controller.dto.request.SignUpRequest
 import com.ieum.account.controller.dto.response.AccountResponse
 import com.ieum.account.controller.dto.response.TokenResponse
@@ -8,7 +7,7 @@ import com.ieum.account.domain.entity.Account
 import com.ieum.account.exception.AccountErrorCode
 import com.ieum.account.repository.AccountRepository
 import com.ieum.account.repository.RefreshTokenRepository
-import com.ieum.security.jwt.JwtProvider
+import com.ieum.account.util.JwtProvider
 import com.ieum.web.exception.IeumException
 import org.slf4j.LoggerFactory
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -42,21 +41,11 @@ class AccountService(
 		log.debug("Account created. accountId={}", account.accountId)
 	}
 
-	fun login(request: LoginRequest): TokenResponse {
-		val account = accountRepository.findByEmailAndIsDeletedFalse(request.email)
-			?: throw IeumException(AccountErrorCode.INVALID_CREDENTIALS)
-
-		if (!passwordEncoder.matches(request.password, account.password)) {
-			throw IeumException(AccountErrorCode.INVALID_CREDENTIALS)
-		}
-
-		val accountId = requireNotNull(account.accountId).toString()
-
-		return TokenResponse(
+	fun issueTokens(accountId: String): TokenResponse =
+		TokenResponse(
 			accessToken = jwtProvider.createAccessToken(accountId),
 			refreshToken = refreshTokenRepository.issue(accountId),
 		)
-	}
 
 	fun reissue(refreshToken: String): TokenResponse {
 		val accountId = refreshTokenRepository.findAccountId(refreshToken)

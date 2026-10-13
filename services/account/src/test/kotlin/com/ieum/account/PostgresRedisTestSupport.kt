@@ -3,6 +3,7 @@ package com.ieum.account
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import org.testcontainers.containers.GenericContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -12,7 +13,7 @@ import java.security.KeyPairGenerator
 import java.util.Base64
 
 @Testcontainers
-abstract class PostgresTestSupport {
+abstract class PostgresRedisTestSupport {
 
 	companion object {
 		@Container
@@ -24,6 +25,12 @@ abstract class PostgresTestSupport {
 				MountableFile.forHostPath("../../infra/docker/schema.sql"),
 				"/docker-entrypoint-initdb.d/schema.sql",
 			)
+
+		@Container
+		@ServiceConnection
+		@JvmStatic
+		val redis = GenericContainer("redis:8")
+			.withExposedPorts(6379)
 
 		@JvmStatic
 		@DynamicPropertySource
