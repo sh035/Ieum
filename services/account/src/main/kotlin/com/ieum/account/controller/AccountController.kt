@@ -1,7 +1,7 @@
 package com.ieum.account.controller
 
-import com.ieum.account.controller.dto.response.AccountResponse
 import com.ieum.account.service.AccountService
+import com.ieum.web.response.BaseResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.GetMapping
@@ -17,7 +17,7 @@ class AccountController(
 	@GetMapping("/me")
 	fun getMe(
 		@AuthenticationPrincipal jwt: Jwt,
-	): AccountResponse {
-		return accountService.getAccount(requireNotNull(jwt.subject))
+	): BaseResponseEntity {
+		return BaseResponseEntity.single(accountService.getAccount(requireNotNull(jwt.subject)))
 	}
 }

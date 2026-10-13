@@ -51,8 +51,11 @@ class AuthControllerTest @Autowired constructor(
 			.andExpect { status { isOk() } }
 			.andReturn().response.contentAsString
 
-		return objectMapper.readValue(response, TokenResponse::class.java)
+		return tokens(response)
 	}
+
+	private fun tokens(body: String): TokenResponse =
+		objectMapper.treeToValue(objectMapper.readTree(body).get("data"), TokenResponse::class.java)
 
 	private fun signedUp(): TokenResponse {
 		signUp(request()).andExpect { status { isCreated() } }
@@ -143,7 +146,7 @@ class AuthControllerTest @Autowired constructor(
 		val reissued = post("/api/v1/auth/refresh", """{"refreshToken":"${token.refreshToken}"}""")
 			.andExpect { status { isOk() } }
 			.andReturn().response.contentAsString
-			.let { objectMapper.readValue(it, TokenResponse::class.java) }
+			.let { tokens(it) }
 
 		assertEquals(token.refreshToken, reissued.refreshToken, "no rotation")
 		assertTrue(reissued.accessToken.isNotBlank())
@@ -180,9 +183,11 @@ class AuthControllerTest @Autowired constructor(
 			header("Authorization", "Bearer ${token.accessToken}")
 		}.andExpect {
 			status { isOk() }
-			jsonPath("\$.email") { value("tobi@ieum.com") }
-			jsonPath("\$.nickname") { value("tobi") }
-			jsonPath("\$.birthDate") { value("1995-03-21") }
+			jsonPath("\$.code") { value(200) }
+			jsonPath("\$.timestamp") { exists() }
+			jsonPath("\$.data.email") { value("tobi@ieum.com") }
+			jsonPath("\$.data.nickname") { value("tobi") }
+			jsonPath("\$.data.birthDate") { value("1995-03-21") }
 		}
 	}
 }

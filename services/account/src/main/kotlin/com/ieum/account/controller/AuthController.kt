@@ -1,16 +1,13 @@
 package com.ieum.account.controller
 
-import com.ieum.account.controller.dto.request.LoginRequest
 import com.ieum.account.controller.dto.request.ReissueRequest
 import com.ieum.account.controller.dto.request.SignUpRequest
-import com.ieum.account.controller.dto.response.TokenResponse
 import com.ieum.account.service.AccountService
+import com.ieum.web.response.BaseResponseEntity
 import jakarta.validation.Valid
-import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -20,32 +17,27 @@ class AuthController(
 ) {
 
 	@PostMapping("/sign-up")
-	@ResponseStatus(HttpStatus.CREATED)
 	fun signUp(
 		@Valid @RequestBody request: SignUpRequest,
-	) {
+	): BaseResponseEntity {
 		accountService.signUp(request)
-	}
 
-	@PostMapping("/login")
-	fun login(
-		@Valid @RequestBody request: LoginRequest,
-	): TokenResponse {
-		return accountService.login(request)
+		return BaseResponseEntity.created()
 	}
 
 	@PostMapping("/refresh")
 	fun reissue(
 		@Valid @RequestBody request: ReissueRequest,
-	): TokenResponse {
-		return accountService.reissue(request.refreshToken)
+	): BaseResponseEntity {
+		return BaseResponseEntity.single(accountService.reissue(request.refreshToken))
 	}
 
 	@PostMapping("/logout")
-	@ResponseStatus(HttpStatus.NO_CONTENT)
 	fun logout(
 		@Valid @RequestBody request: ReissueRequest,
-	) {
+	): BaseResponseEntity {
 		accountService.logout(request.refreshToken)
+
+		return BaseResponseEntity.emptyNoContent()
 	}
 }

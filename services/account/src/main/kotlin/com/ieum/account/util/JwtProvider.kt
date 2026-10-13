@@ -1,4 +1,4 @@
-package com.ieum.security.jwt
+package com.ieum.account.util
 
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.oauth2.jwt.JwtClaimsSet
