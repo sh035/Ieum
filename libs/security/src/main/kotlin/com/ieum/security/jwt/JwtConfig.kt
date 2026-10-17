@@ -12,5 +12,5 @@ class JwtConfig {
 
 	@Bean
 	fun jwtDecoder(properties: JwtProperties): JwtDecoder =
-		NimbusJwtDecoder.withPublicKey(properties.publicKey).build()
+		NimbusJwtDecoder.withPublicKey(properties.rsaPublicKey()).build()
 }
