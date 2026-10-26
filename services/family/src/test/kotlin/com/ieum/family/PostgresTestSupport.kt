@@ -6,8 +6,6 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.MountableFile
 import java.security.KeyPairGenerator
@@ -17,11 +15,10 @@ import java.time.Instant
 import java.util.Base64
 import java.util.UUID
 
-@Testcontainers
 abstract class PostgresTestSupport {
 
 	companion object {
-		@Container
+		// 테스트 클래스마다 컨테이너를 내리면 캐시된 Spring 컨텍스트가 죽은 포트를 바라보므로 JVM 동안 하나만 띄운다.
 		@ServiceConnection
 		@JvmStatic
 		val postgres = PostgreSQLContainer("postgres:18")
@@ -30,6 +27,7 @@ abstract class PostgresTestSupport {
 				MountableFile.forHostPath("../../infra/docker/schema.sql"),
 				"/docker-entrypoint-initdb.d/schema.sql",
 			)
+			.apply { start() }
 
 		private val keyPair = KeyPairGenerator.getInstance("RSA")
 			.apply { initialize(2048) }
