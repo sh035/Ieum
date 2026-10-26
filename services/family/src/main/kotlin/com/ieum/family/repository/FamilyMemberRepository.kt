@@ -7,4 +7,8 @@ import java.util.UUID
 interface FamilyMemberRepository : JpaRepository<FamilyMember, UUID> {
 
 	fun findAllByAccountIdAndIsDeletedFalseOrderByCreatedAt(accountId: UUID): List<FamilyMember>
+
+	fun findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId: UUID, accountId: UUID): FamilyMember?
+
+	fun existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId: UUID, accountId: UUID): Boolean
 }

@@ -7,4 +7,6 @@ import java.util.UUID
 interface FamilyRepository : JpaRepository<Family, UUID> {
 
 	fun findAllByFamilyIdInAndIsDeletedFalse(familyIds: Collection<UUID>): List<Family>
+
+	fun findByFamilyIdAndIsDeletedFalse(familyId: UUID): Family?
 }

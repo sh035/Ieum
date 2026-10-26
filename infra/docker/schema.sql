@@ -45,3 +45,19 @@ CREATE UNIQUE INDEX uk_family_member_family_id_account_id
 
 -- 내 가족 목록 조회용
 CREATE INDEX idx_family_member_account_id ON family.family_member (account_id);
+
+CREATE TABLE family.family_invitation
+(
+	family_invitation_id uuid PRIMARY KEY,
+	family_id            uuid         NOT NULL REFERENCES family.family (family_id),
+	code                 varchar(8)   NOT NULL UNIQUE,
+	expires_at           timestamp(6) NOT NULL,
+	created_at           timestamp(6) NOT NULL,
+	updated_at           timestamp(6),
+	is_deleted           boolean      NOT NULL DEFAULT false
+);
+
+-- 가족마다 유효한 초대 코드는 하나만 둔다.
+CREATE UNIQUE INDEX uk_family_invitation_family_id
+	ON family.family_invitation (family_id)
+	WHERE is_deleted = false;

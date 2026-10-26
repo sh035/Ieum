@@ -1,6 +1,7 @@
 package com.ieum.family
 
 import com.ieum.family.domain.enums.FamilyRole
+import com.ieum.family.repository.FamilyInvitationRepository
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
 import org.junit.jupiter.api.BeforeEach
@@ -22,6 +23,7 @@ class FamilyControllerTest @Autowired constructor(
 	private val mockMvc: MockMvc,
 	private val familyRepository: FamilyRepository,
 	private val familyMemberRepository: FamilyMemberRepository,
+	private val familyInvitationRepository: FamilyInvitationRepository,
 	private val objectMapper: ObjectMapper,
 ) : PostgresTestSupport() {
 
@@ -29,6 +31,7 @@ class FamilyControllerTest @Autowired constructor(
 
 	@BeforeEach
 	fun clean() {
+		familyInvitationRepository.deleteAll()
 		familyMemberRepository.deleteAll()
 		familyRepository.deleteAll()
 	}
