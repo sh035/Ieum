@@ -17,6 +17,9 @@ class BaseResponseEntity : ResponseEntity<BaseResponse> {
 		fun created(): BaseResponseEntity =
 			BaseResponseEntity(HttpStatus.CREATED)
 
+		fun <T> created(body: T): BaseResponseEntity =
+			BaseResponseEntity(SingleResponse(HttpStatus.CREATED, body), HttpStatus.CREATED)
+
 		fun emptyNoContent(): BaseResponseEntity =
 			BaseResponseEntity(HttpStatus.NO_CONTENT)
 	}

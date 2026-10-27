@@ -2,11 +2,14 @@ package com.ieum.account.controller
 
 import com.ieum.account.service.AccountService
 import com.ieum.web.response.BaseResponseEntity
+import jakarta.validation.constraints.Size
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.util.UUID
 
 @RestController
 @RequestMapping("/api/v1/account")
@@ -19,5 +22,12 @@ class AccountController(
 		@AuthenticationPrincipal jwt: Jwt,
 	): BaseResponseEntity {
 		return BaseResponseEntity.single(accountService.getAccount(requireNotNull(jwt.subject)))
+	}
+
+	@GetMapping
+	fun getProfiles(
+		@RequestParam @Size(max = 100) ids: List<UUID>,
+	): BaseResponseEntity {
+		return BaseResponseEntity.single(accountService.getProfiles(ids))
 	}
 }

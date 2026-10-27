@@ -9,4 +9,6 @@ interface AccountRepository : JpaRepository<Account, UUID> {
 	fun existsByEmailAndIsDeletedFalse(email: String): Boolean
 
 	fun findByEmailAndIsDeletedFalse(email: String): Account?
+
+	fun findAllByAccountIdInAndIsDeletedFalse(accountIds: Collection<UUID>): List<Account>
 }
