@@ -1,3 +1,21 @@
 spring:
   config:
     import: "optional:file:./.${SPRING_PROFILES_ACTIVE}.env[.properties]"
+  application:
+    name: planner
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: planner
+
+server:
+  port: 8083
+
+jwt:
+  public-key: ${JWT_PUBLIC_KEY}
