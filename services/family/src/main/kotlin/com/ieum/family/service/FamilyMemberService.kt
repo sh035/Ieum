@@ -1,6 +1,7 @@
 package com.ieum.family.service
 
 import com.ieum.family.controller.dto.response.FamilyMemberResponse
+import com.ieum.family.controller.dto.response.FamilyMemberRoleResponse
 import com.ieum.family.exception.FamilyErrorCode
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.web.exception.IeumException
@@ -28,5 +29,12 @@ class FamilyMemberService(
 				joinedAt = it.createdAt,
 			)
 		}
+	}
+
+	fun getRole(familyId: UUID, accountId: UUID): FamilyMemberRoleResponse {
+		val member = familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, accountId)
+			?: throw IeumException(FamilyErrorCode.FAMILY_MEMBER_NOT_FOUND)
+
+		return FamilyMemberRoleResponse(role = member.role)
 	}
 }
