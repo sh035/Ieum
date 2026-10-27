@@ -1,6 +1,7 @@
 package com.ieum.account.service
 
 import com.ieum.account.controller.dto.request.SignUpRequest
+import com.ieum.account.controller.dto.response.AccountProfileResponse
 import com.ieum.account.controller.dto.response.AccountResponse
 import com.ieum.account.controller.dto.response.TokenResponse
 import com.ieum.account.domain.entity.Account
@@ -72,4 +73,9 @@ class AccountService(
 			birthDate = account.birthDate,
 		)
 	}
+
+	// 없거나 탈퇴한 계정은 응답에서 빠진다.
+	fun getProfiles(accountIds: List<UUID>): List<AccountProfileResponse> =
+		accountRepository.findAllByAccountIdInAndIsDeletedFalse(accountIds)
+			.map { AccountProfileResponse(accountId = requireNotNull(it.accountId), nickname = it.nickname) }
 }
