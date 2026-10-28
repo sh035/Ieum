@@ -3,18 +3,25 @@ package com.ieum.expense.service
 import com.ieum.expense.controller.dto.request.CreateExpenseRequest
 import com.ieum.expense.controller.dto.request.UpdateExpenseRequest
 import com.ieum.expense.controller.dto.response.ExpenseResponse
+import com.ieum.expense.controller.dto.response.MonthlyExpenseResponse
+import com.ieum.expense.controller.dto.response.MonthlyExpenseResponse.BudgetSummary
+import com.ieum.expense.controller.dto.response.MonthlyExpenseResponse.ExpenseSection
 import com.ieum.expense.domain.entity.Expense
+import com.ieum.expense.domain.enums.ExpenseCategory
 import com.ieum.expense.domain.enums.Visibility
 import com.ieum.expense.exception.ExpenseErrorCode
 import com.ieum.expense.repository.ExpenseRepository
 import com.ieum.web.exception.IeumException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.YearMonth
 import java.util.UUID
 
 @Service
 class ExpenseService(
 	private val expenseRepository: ExpenseRepository,
+	private val budgetService: BudgetService,
 	private val familyClient: FamilyClient,
 ) {
 
@@ -43,6 +50,37 @@ class ExpenseService(
 		log.debug("Expense created. expenseId={}, accountId={}", expense.expenseId, accountId)
 
 		return expense.toResponse()
+	}
+
+	// 가족 지출과 내 개인 지출을 따로 집계한다. 가족 예산은 OWNER / MANAGER 에게만 내려준다.
+	@Transactional(readOnly = true)
+	fun getMonthly(accountId: String, familyId: UUID, month: YearMonth): MonthlyExpenseResponse {
+		val me = UUID.fromString(accountId)
+		val role = familyClient.getRole(familyId, me) ?: throw IeumException(ExpenseErrorCode.FAMILY_NOT_FOUND)
+		val from = month.atDay(1)
+		val to = month.atEndOfMonth()
+
+		val familyExpenses = expenseRepository
+			.findAllByFamilyIdAndVisibilityAndSpentDateBetweenAndIsDeletedFalse(familyId, Visibility.FAMILY, from, to)
+		val personalExpenses = expenseRepository
+			.findAllByFamilyIdAndVisibilityAndCreatorAccountIdAndSpentDateBetweenAndIsDeletedFalse(
+				familyId,
+				Visibility.PRIVATE,
+				me,
+				from,
+				to,
+			)
+		val familyBudget = if (BudgetService.canManageFamilyBudget(role)) {
+			budgetService.findEffectiveAmount(familyId, null, month)
+		} else {
+			null
+		}
+
+		return MonthlyExpenseResponse(
+			month = month,
+			family = section(familyExpenses, familyBudget),
+			personal = section(personalExpenses, budgetService.findEffectiveAmount(familyId, me, month)),
+		)
 	}
 
 	fun getExpense(accountId: String, expenseId: UUID): ExpenseResponse =
@@ -97,6 +135,22 @@ class ExpenseService(
 			throw IeumException(ExpenseErrorCode.INVALID_PAYER)
 		}
 		return payerAccountId
+	}
+
+	// 차트에서 빠진 키를 따로 다루지 않도록 모든 카테고리를 0 원부터 채운다.
+	private fun section(expenses: List<Expense>, budgetAmount: Int?): ExpenseSection {
+		val total = expenses.sumOf { it.amount.toLong() }
+
+		return ExpenseSection(
+			total = total,
+			categoryTotals = ExpenseCategory.entries.associateWith { category ->
+				expenses.filter { it.category == category }.sumOf { it.amount.toLong() }
+			},
+			budget = budgetAmount?.let { BudgetSummary(amount = it, remaining = it - total) },
+			expenses = expenses
+				.sortedWith(compareByDescending<Expense> { it.spentDate }.thenByDescending { it.createdAt })
+				.map { it.toResponse() },
+		)
 	}
 
 	private fun Expense.toResponse() = ExpenseResponse(

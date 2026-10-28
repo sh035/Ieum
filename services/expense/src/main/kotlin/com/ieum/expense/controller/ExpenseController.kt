@@ -14,7 +14,9 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.time.YearMonth
 import java.util.UUID
 
 @RestController
@@ -29,6 +31,15 @@ class ExpenseController(
 		@Valid @RequestBody request: CreateExpenseRequest,
 	): BaseResponseEntity {
 		return BaseResponseEntity.created(expenseService.createExpense(requireNotNull(jwt.subject), request))
+	}
+
+	@GetMapping
+	fun getMonthly(
+		@AuthenticationPrincipal jwt: Jwt,
+		@RequestParam familyId: UUID,
+		@RequestParam month: YearMonth,
+	): BaseResponseEntity {
+		return BaseResponseEntity.single(expenseService.getMonthly(requireNotNull(jwt.subject), familyId, month))
 	}
 
 	@GetMapping("/{expenseId}")
