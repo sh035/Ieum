@@ -66,6 +66,7 @@ CREATE UNIQUE INDEX uk_family_invitation_family_id
 CREATE TABLE planner.todo
 (
 	todo_id             uuid PRIMARY KEY,
+	parent_todo_id      uuid REFERENCES planner.todo (todo_id),
 	family_id           uuid,
 	creator_account_id  uuid         NOT NULL,
 	assignee_account_id uuid         NOT NULL,
@@ -86,6 +87,7 @@ CREATE TABLE planner.todo
 
 CREATE INDEX idx_todo_family_id ON planner.todo (family_id);
 CREATE INDEX idx_todo_creator_account_id ON planner.todo (creator_account_id);
+CREATE INDEX idx_todo_parent_todo_id ON planner.todo (parent_todo_id);
 
 CREATE TABLE planner.todo_checklist_item
 (

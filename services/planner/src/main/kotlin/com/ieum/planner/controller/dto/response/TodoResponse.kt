@@ -8,6 +8,7 @@ import java.util.UUID
 
 data class TodoResponse(
 	val todoId: UUID,
+	val parentTodoId: UUID?,
 	val familyId: UUID?,
 	val creatorAccountId: UUID,
 	val assigneeAccountId: UUID,

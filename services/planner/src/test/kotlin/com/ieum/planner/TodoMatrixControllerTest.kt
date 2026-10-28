@@ -38,7 +38,7 @@ class TodoMatrixControllerTest @Autowired constructor(
 	@BeforeEach
 	fun setUp() {
 		todoChecklistItemRepository.deleteAll()
-		todoRepository.deleteAll()
+		todoRepository.deleteAllInBatch()
 		`when`(familyClient.isMember(familyId, me)).thenReturn(true)
 		`when`(familyClient.isMember(familyId, member)).thenReturn(true)
 	}

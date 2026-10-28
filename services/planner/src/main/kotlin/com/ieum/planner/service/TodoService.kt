@@ -33,20 +33,31 @@ class TodoService(
 		val me = UUID.fromString(accountId)
 		checkDueTime(request.dueDate, request.dueTime)
 
-		val familyId = when (request.visibility) {
-			Visibility.FAMILY -> request.familyId ?: throw IeumException(PlannerErrorCode.INVALID_VISIBILITY_FAMILY)
-			Visibility.PRIVATE -> request.familyId?.let { throw IeumException(PlannerErrorCode.INVALID_VISIBILITY_FAMILY) }
+		val parent = request.parentTodoId?.let { findParent(me, it) }
+		val (familyId, visibility) = if (parent != null) {
+			if (request.visibility != null || request.familyId != null) {
+				throw IeumException(PlannerErrorCode.SUBTASK_VISIBILITY_INHERITED)
+			}
+			parent.familyId to parent.visibility
+		} else {
+			val visibility = request.visibility ?: throw IeumException(PlannerErrorCode.VISIBILITY_REQUIRED)
+			val familyId = when (visibility) {
+				Visibility.FAMILY -> request.familyId ?: throw IeumException(PlannerErrorCode.INVALID_VISIBILITY_FAMILY)
+				Visibility.PRIVATE -> request.familyId?.let { throw IeumException(PlannerErrorCode.INVALID_VISIBILITY_FAMILY) }
+			}
+			familyId?.let { checkMember(it, me) }
+			familyId to visibility
 		}
-		familyId?.let { checkMember(it, me) }
 
 		val todo = todoRepository.save(
 			Todo(
+				parentTodoId = parent?.todoId,
 				familyId = familyId,
 				creatorAccountId = me,
 				assigneeAccountId = resolveAssignee(familyId, me, request.assigneeAccountId),
 				title = request.title,
 				memo = request.memo,
-				visibility = request.visibility,
+				visibility = visibility,
 				priority = request.priority,
 				dueDate = request.dueDate,
 				dueTime = request.dueTime,
@@ -137,16 +148,22 @@ class TodoService(
 		return toResponses(listOf(todoRepository.save(todo))).single()
 	}
 
+	// 하위 할 일도 함께 삭제한다.
+	@Transactional
 	fun deleteTodo(accountId: String, todoId: UUID) {
 		val todo = findAccessibleTodo(UUID.fromString(accountId), todoId)
-		todo.delete()
-		todoRepository.save(todo)
+		val todos = listOf(todo) + findDescendants(todoId)
+		todos.forEach { it.delete() }
+		todoRepository.saveAll(todos)
 	}
 
+	// 완료하면 하위 할 일도 함께 완료한다. 완료 취소는 이 할 일만 되돌린다.
+	@Transactional
 	fun updateCompletion(accountId: String, todoId: UUID, isCompleted: Boolean) {
 		val todo = findAccessibleTodo(UUID.fromString(accountId), todoId)
-		todo.isCompleted = isCompleted
-		todoRepository.save(todo)
+		val todos = if (isCompleted) listOf(todo) + findDescendants(todoId) else listOf(todo)
+		todos.forEach { it.isCompleted = isCompleted }
+		todoRepository.saveAll(todos)
 	}
 
 	// 볼 수 없는 할 일은 존재 자체를 숨긴다. 체크리스트도 같은 권한을 따른다.
@@ -163,6 +180,25 @@ class TodoService(
 		}
 
 		return todo
+	}
+
+	// 하위 할 일은 손자 단계까지만 만든다.
+	private fun findParent(me: UUID, parentTodoId: UUID): Todo {
+		val parent = findAccessibleTodo(me, parentTodoId)
+		val grandparentTodoId = parent.parentTodoId ?: return parent
+
+		if (todoRepository.findByTodoIdAndIsDeletedFalse(grandparentTodoId)?.parentTodoId != null) {
+			throw IeumException(PlannerErrorCode.SUBTASK_DEPTH_EXCEEDED)
+		}
+		return parent
+	}
+
+	// 깊이가 두 단계라 자식과 손자를 한 번씩 조회한다.
+	private fun findDescendants(todoId: UUID): List<Todo> {
+		val children = todoRepository.findAllByParentTodoIdInAndIsDeletedFalse(listOf(todoId))
+		if (children.isEmpty()) return children
+
+		return children + todoRepository.findAllByParentTodoIdInAndIsDeletedFalse(children.map { requireNotNull(it.todoId) })
 	}
 
 	// 개인 할 일의 담당자는 항상 본인이고, 가족 할 일은 담당자를 반드시 지정한다.
@@ -208,6 +244,7 @@ class TodoService(
 
 	private fun Todo.toResponse(checklistItems: List<TodoChecklistItem>) = TodoResponse(
 		todoId = requireNotNull(todoId),
+		parentTodoId = parentTodoId,
 		familyId = familyId,
 		creatorAccountId = creatorAccountId,
 		assigneeAccountId = assigneeAccountId,
