@@ -18,6 +18,9 @@ import java.util.UUID
 @Table(name = "todo")
 class Todo(
 	@Column(updatable = false)
+	val parentTodoId: UUID?,
+
+	@Column(updatable = false)
 	val familyId: UUID?,
 
 	@Column(nullable = false, updatable = false)

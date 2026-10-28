@@ -9,8 +9,9 @@ import java.time.LocalTime
 import java.util.UUID
 
 data class CreateTodoRequest(
+	val parentTodoId: UUID?,
 	val familyId: UUID?,
-	val visibility: Visibility,
+	val visibility: Visibility?,
 	@field:NotBlank
 	@field:Size(max = 255)
 	val title: String,

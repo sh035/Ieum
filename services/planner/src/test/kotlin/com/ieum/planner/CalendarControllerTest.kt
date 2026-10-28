@@ -40,7 +40,7 @@ class CalendarControllerTest @Autowired constructor(
 	@BeforeEach
 	fun setUp() {
 		todoChecklistItemRepository.deleteAll()
-		todoRepository.deleteAll()
+		todoRepository.deleteAllInBatch()
 		scheduleAttendeeRepository.deleteAll()
 		scheduleRepository.deleteAll()
 		`when`(familyClient.isMember(familyId, me)).thenReturn(true)
