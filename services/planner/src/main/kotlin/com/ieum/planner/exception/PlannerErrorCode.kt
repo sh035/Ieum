@@ -20,5 +20,6 @@ enum class PlannerErrorCode(
 	INVALID_ATTENDEE(HttpStatus.BAD_REQUEST, "Attendees must be family members, or only yourself for a private schedule."),
 	INVALID_SCHEDULE_PERIOD(HttpStatus.BAD_REQUEST, "Schedule must not end before it starts."),
 	INVALID_DATE_RANGE(HttpStatus.BAD_REQUEST, "Range must not end before it starts."),
+	CALENDAR_RANGE_TOO_LONG(HttpStatus.BAD_REQUEST, "Calendar range must be 42 days or less."),
 	FAMILY_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Family service unavailable."),
 }

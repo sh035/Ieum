@@ -66,11 +66,17 @@ class ScheduleService(
 			throw IeumException(PlannerErrorCode.INVALID_DATE_RANGE)
 		}
 		val me = UUID.fromString(accountId)
+		familyId?.let { checkMember(it, me) }
+
+		return findSchedules(me, familyId, from, to)
+	}
+
+	// 기간 검증과 구성원 확인은 호출하는 쪽에서 끝낸다.
+	fun findSchedules(me: UUID, familyId: UUID?, from: LocalDate, to: LocalDate): List<ScheduleResponse> {
 		val rangeStart = from.atStartOfDay()
 		val rangeEnd = to.plusDays(1).atStartOfDay()
 
 		val familySchedules = familyId?.let {
-			checkMember(it, me)
 			scheduleRepository.findAllByFamilyIdAndStartAtLessThanAndEndAtGreaterThanEqualAndIsDeletedFalse(it, rangeEnd, rangeStart)
 		}.orEmpty()
 		val privateSchedules = scheduleRepository

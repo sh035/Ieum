@@ -100,6 +100,21 @@ class TodoService(
 		)
 	}
 
+	// 마감일이 기간 안에 있는 할 일을 완료 여부와 상관없이 반환한다. 구성원 확인은 호출하는 쪽에서 끝낸다.
+	fun findTodosDueBetween(me: UUID, familyId: UUID?, from: LocalDate, to: LocalDate): List<TodoResponse> {
+		val familyTodos = familyId?.let {
+			todoRepository.findAllByFamilyIdAndDueDateBetweenAndIsDeletedFalse(it, from, to)
+		}.orEmpty()
+		val privateTodos =
+			todoRepository.findAllByCreatorAccountIdAndVisibilityAndDueDateBetweenAndIsDeletedFalse(me, Visibility.PRIVATE, from, to)
+
+		return toResponses(
+			(familyTodos + privateTodos).sortedWith(
+				compareBy<Todo>({ it.dueDate }, { it.dueTime }, { it.createdAt }),
+			),
+		)
+	}
+
 	@Transactional(readOnly = true)
 	fun getTodo(accountId: String, todoId: UUID): TodoResponse =
 		toResponses(listOf(findAccessibleTodo(UUID.fromString(accountId), todoId))).single()
