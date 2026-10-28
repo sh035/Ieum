@@ -1,6 +1,6 @@
 package com.ieum.planner.domain.enums
 
-enum class TodoVisibility {
+enum class Visibility {
 	FAMILY,
 	PRIVATE,
 }

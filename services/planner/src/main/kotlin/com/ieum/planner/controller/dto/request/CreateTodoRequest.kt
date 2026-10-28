@@ -1,7 +1,7 @@
 package com.ieum.planner.controller.dto.request
 
 import com.ieum.planner.domain.enums.TodoPriority
-import com.ieum.planner.domain.enums.TodoVisibility
+import com.ieum.planner.domain.enums.Visibility
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import java.time.LocalDate
@@ -10,7 +10,7 @@ import java.util.UUID
 
 data class CreateTodoRequest(
 	val familyId: UUID?,
-	val visibility: TodoVisibility,
+	val visibility: Visibility,
 	@field:NotBlank
 	@field:Size(max = 255)
 	val title: String,

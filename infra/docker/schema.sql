@@ -99,3 +99,42 @@ CREATE TABLE planner.todo_checklist_item
 );
 
 CREATE INDEX idx_todo_checklist_item_todo_id ON planner.todo_checklist_item (todo_id);
+
+-- 종일 일정은 start_at / end_at 의 날짜만 쓴다.
+CREATE TABLE planner.schedule
+(
+	schedule_id        uuid PRIMARY KEY,
+	family_id          uuid,
+	creator_account_id uuid         NOT NULL,
+	title              varchar(255) NOT NULL,
+	memo               text,
+	visibility         varchar(20)  NOT NULL,
+	is_all_day         boolean      NOT NULL,
+	start_at           timestamp(6) NOT NULL,
+	end_at             timestamp(6) NOT NULL,
+	created_at         timestamp(6) NOT NULL,
+	updated_at         timestamp(6),
+	is_deleted         boolean      NOT NULL DEFAULT false,
+	CONSTRAINT ck_schedule_visibility_family_id CHECK (
+		(visibility = 'FAMILY' AND family_id IS NOT NULL) OR (visibility = 'PRIVATE' AND family_id IS NULL)
+	),
+	CONSTRAINT ck_schedule_period CHECK (start_at <= end_at)
+);
+
+CREATE INDEX idx_schedule_family_id ON planner.schedule (family_id);
+CREATE INDEX idx_schedule_creator_account_id ON planner.schedule (creator_account_id);
+
+-- 가족 일정의 알림은 참석자에게만 보낸다.
+CREATE TABLE planner.schedule_attendee
+(
+	schedule_attendee_id uuid PRIMARY KEY,
+	schedule_id          uuid         NOT NULL REFERENCES planner.schedule (schedule_id),
+	account_id           uuid         NOT NULL,
+	created_at           timestamp(6) NOT NULL,
+	updated_at           timestamp(6),
+	is_deleted           boolean      NOT NULL DEFAULT false
+);
+
+CREATE UNIQUE INDEX uk_schedule_attendee_schedule_id_account_id
+	ON planner.schedule_attendee (schedule_id, account_id)
+	WHERE is_deleted = false;

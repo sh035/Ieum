@@ -1,7 +1,7 @@
 package com.ieum.planner.domain.entity
 
 import com.ieum.planner.domain.enums.TodoPriority
-import com.ieum.planner.domain.enums.TodoVisibility
+import com.ieum.planner.domain.enums.Visibility
 import com.ieum.web.entity.BaseEntity
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -33,7 +33,7 @@ class Todo(
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, updatable = false)
-	val visibility: TodoVisibility,
+	val visibility: Visibility,
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false)

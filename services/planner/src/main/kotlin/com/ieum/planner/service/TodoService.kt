@@ -8,7 +8,7 @@ import com.ieum.planner.controller.dto.response.TodoResponse
 import com.ieum.planner.domain.entity.Todo
 import com.ieum.planner.domain.entity.TodoChecklistItem
 import com.ieum.planner.domain.enums.TodoPriority
-import com.ieum.planner.domain.enums.TodoVisibility
+import com.ieum.planner.domain.enums.Visibility
 import com.ieum.planner.exception.PlannerErrorCode
 import com.ieum.planner.repository.TodoChecklistItemRepository
 import com.ieum.planner.repository.TodoRepository
@@ -34,8 +34,8 @@ class TodoService(
 		checkDueTime(request.dueDate, request.dueTime)
 
 		val familyId = when (request.visibility) {
-			TodoVisibility.FAMILY -> request.familyId ?: throw IeumException(PlannerErrorCode.INVALID_TODO_FAMILY)
-			TodoVisibility.PRIVATE -> request.familyId?.let { throw IeumException(PlannerErrorCode.INVALID_TODO_FAMILY) }
+			Visibility.FAMILY -> request.familyId ?: throw IeumException(PlannerErrorCode.INVALID_VISIBILITY_FAMILY)
+			Visibility.PRIVATE -> request.familyId?.let { throw IeumException(PlannerErrorCode.INVALID_VISIBILITY_FAMILY) }
 		}
 		familyId?.let { checkMember(it, me) }
 
@@ -67,7 +67,7 @@ class TodoService(
 			todoRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(it)
 		}.orEmpty()
 		val privateTodos =
-			todoRepository.findAllByCreatorAccountIdAndVisibilityAndIsDeletedFalseOrderByCreatedAt(me, TodoVisibility.PRIVATE)
+			todoRepository.findAllByCreatorAccountIdAndVisibilityAndIsDeletedFalseOrderByCreatedAt(me, Visibility.PRIVATE)
 
 		return toResponses((familyTodos + privateTodos).sortedBy { it.createdAt })
 	}
@@ -81,7 +81,7 @@ class TodoService(
 			todoRepository.findAllByFamilyIdAndAssigneeAccountIdAndIsCompletedFalseAndIsDeletedFalse(it, me)
 		}.orEmpty()
 		val privateTodos =
-			todoRepository.findAllByAssigneeAccountIdAndVisibilityAndIsCompletedFalseAndIsDeletedFalse(me, TodoVisibility.PRIVATE)
+			todoRepository.findAllByAssigneeAccountIdAndVisibilityAndIsCompletedFalseAndIsDeletedFalse(me, Visibility.PRIVATE)
 
 		val urgentUntil = LocalDate.now().plusDays(1)
 		val todos = toResponses(
@@ -140,8 +140,8 @@ class TodoService(
 			?: throw IeumException(PlannerErrorCode.TODO_NOT_FOUND)
 
 		val accessible = when (todo.visibility) {
-			TodoVisibility.FAMILY -> familyClient.isMember(requireNotNull(todo.familyId), me)
-			TodoVisibility.PRIVATE -> todo.creatorAccountId == me
+			Visibility.FAMILY -> familyClient.isMember(requireNotNull(todo.familyId), me)
+			Visibility.PRIVATE -> todo.creatorAccountId == me
 		}
 		if (!accessible) {
 			throw IeumException(PlannerErrorCode.TODO_NOT_FOUND)
