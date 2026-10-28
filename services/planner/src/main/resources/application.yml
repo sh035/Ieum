@@ -13,9 +13,16 @@ spring:
     properties:
       hibernate:
         default_schema: planner
+  http:
+    clients:
+      connect-timeout: 2s
+      read-timeout: 3s
 
 server:
   port: 8083
 
 jwt:
   public-key: ${JWT_PUBLIC_KEY}
+
+family:
+  url: ${FAMILY_URL}

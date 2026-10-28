@@ -61,3 +61,28 @@ CREATE TABLE family.family_invitation
 CREATE UNIQUE INDEX uk_family_invitation_family_id
 	ON family.family_invitation (family_id)
 	WHERE is_deleted = false;
+
+-- PRIVATE 할 일은 가족에 속하지 않는다.
+CREATE TABLE planner.todo
+(
+	todo_id             uuid PRIMARY KEY,
+	family_id           uuid,
+	creator_account_id  uuid         NOT NULL,
+	assignee_account_id uuid         NOT NULL,
+	title               varchar(255) NOT NULL,
+	memo                text,
+	visibility          varchar(20)  NOT NULL,
+	priority            varchar(20)  NOT NULL,
+	due_date            date,
+	due_time            time,
+	is_completed        boolean      NOT NULL DEFAULT false,
+	created_at          timestamp(6) NOT NULL,
+	updated_at          timestamp(6),
+	is_deleted          boolean      NOT NULL DEFAULT false,
+	CONSTRAINT ck_todo_visibility_family_id CHECK (
+		(visibility = 'FAMILY' AND family_id IS NOT NULL) OR (visibility = 'PRIVATE' AND family_id IS NULL)
+	)
+);
+
+CREATE INDEX idx_todo_family_id ON planner.todo (family_id);
+CREATE INDEX idx_todo_creator_account_id ON planner.todo (creator_account_id);
