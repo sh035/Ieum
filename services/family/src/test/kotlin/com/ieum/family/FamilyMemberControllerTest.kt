@@ -11,8 +11,10 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.patch
 import java.util.UUID
 
 @SpringBootTest
@@ -40,6 +42,16 @@ class FamilyMemberControllerTest @Autowired constructor(
 		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = memberId, role = FamilyRole.MEMBER))
 		return familyId
 	}
+
+	private fun memberIdOf(familyId: UUID, accountId: UUID): UUID =
+		requireNotNull(familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, accountId)?.familyMemberId)
+
+	private fun updateRole(familyId: UUID, familyMemberId: UUID, role: String, accountId: UUID = ownerId) =
+		mockMvc.patch("/api/v1/family/$familyId/member/$familyMemberId/role") {
+			header("Authorization", "Bearer ${accessToken(accountId)}")
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"role":"$role"}"""
+		}
 
 	private fun getMembers(familyId: UUID, accountId: UUID) = mockMvc.get("/api/v1/family/$familyId/member") {
 		header("Authorization", "Bearer ${accessToken(accountId)}")
@@ -71,5 +83,65 @@ class FamilyMemberControllerTest @Autowired constructor(
 	@Test
 	fun `없는 가족이면 404`() {
 		getMembers(UUID.randomUUID(), ownerId).andExpect { status { isNotFound() } }
+	}
+
+	@Test
+	fun `OWNER는 구성원을 MANAGER로 바꾸고 다시 MEMBER로 돌린다`() {
+		val familyId = createFamily()
+		val memberFamilyMemberId = memberIdOf(familyId, memberId)
+
+		updateRole(familyId, memberFamilyMemberId, "MANAGER").andExpect {
+			status { isOk() }
+			jsonPath("\$.data.familyMemberId") { value(memberFamilyMemberId.toString()) }
+			jsonPath("\$.data.role") { value("MANAGER") }
+		}
+		updateRole(familyId, memberFamilyMemberId, "MEMBER").andExpect {
+			status { isOk() }
+			jsonPath("\$.data.role") { value("MEMBER") }
+		}
+	}
+
+	@Test
+	fun `OWNER가 아니면 403이고 MANAGER도 바꿀 수 없다`() {
+		val familyId = createFamily()
+		val memberFamilyMemberId = memberIdOf(familyId, memberId)
+		updateRole(familyId, memberFamilyMemberId, "MANAGER")
+
+		updateRole(familyId, memberFamilyMemberId, "MEMBER", accountId = memberId).andExpect { status { isForbidden() } }
+	}
+
+	@Test
+	fun `구성원이 아니면 역할도 바꿀 수 없다 404`() {
+		val familyId = createFamily()
+
+		updateRole(familyId, memberIdOf(familyId, memberId), "MANAGER", accountId = UUID.randomUUID())
+			.andExpect { status { isNotFound() } }
+	}
+
+	@Test
+	fun `OWNER 역할은 주거나 바꿀 수 없다`() {
+		val familyId = createFamily()
+
+		updateRole(familyId, memberIdOf(familyId, memberId), "OWNER").andExpect { status { isBadRequest() } }
+		updateRole(familyId, memberIdOf(familyId, ownerId), "MEMBER").andExpect { status { isBadRequest() } }
+	}
+
+	@Test
+	fun `다른 가족의 구성원이나 없는 구성원은 404`() {
+		val familyId = createFamily()
+		val otherFamilyId = requireNotNull(familyRepository.save(Family(name = "옆집")).familyId)
+		val otherMember = familyMemberRepository.save(
+			FamilyMember(familyId = otherFamilyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER),
+		)
+
+		updateRole(familyId, requireNotNull(otherMember.familyMemberId), "MANAGER").andExpect { status { isNotFound() } }
+		updateRole(familyId, UUID.randomUUID(), "MANAGER").andExpect { status { isNotFound() } }
+	}
+
+	@Test
+	fun `없는 역할이면 400`() {
+		val familyId = createFamily()
+
+		updateRole(familyId, memberIdOf(familyId, memberId), "ADMIN").andExpect { status { isBadRequest() } }
 	}
 }
