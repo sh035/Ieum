@@ -40,6 +40,14 @@ class TodoController(
 		return BaseResponseEntity.single(todoService.getTodos(requireNotNull(jwt.subject), familyId))
 	}
 
+	@GetMapping("/matrix")
+	fun getMatrix(
+		@AuthenticationPrincipal jwt: Jwt,
+		@RequestParam(required = false) familyId: UUID?,
+	): BaseResponseEntity {
+		return BaseResponseEntity.single(todoService.getMatrix(requireNotNull(jwt.subject), familyId))
+	}
+
 	@GetMapping("/{todoId}")
 	fun getTodo(
 		@AuthenticationPrincipal jwt: Jwt,

@@ -3,9 +3,11 @@ package com.ieum.planner.service
 import com.ieum.planner.controller.dto.request.CreateTodoRequest
 import com.ieum.planner.controller.dto.request.UpdateTodoRequest
 import com.ieum.planner.controller.dto.response.TodoChecklistItemResponse
+import com.ieum.planner.controller.dto.response.TodoMatrixResponse
 import com.ieum.planner.controller.dto.response.TodoResponse
 import com.ieum.planner.domain.entity.Todo
 import com.ieum.planner.domain.entity.TodoChecklistItem
+import com.ieum.planner.domain.enums.TodoPriority
 import com.ieum.planner.domain.enums.TodoVisibility
 import com.ieum.planner.exception.PlannerErrorCode
 import com.ieum.planner.repository.TodoChecklistItemRepository
@@ -68,6 +70,34 @@ class TodoService(
 			todoRepository.findAllByCreatorAccountIdAndVisibilityAndIsDeletedFalseOrderByCreatedAt(me, TodoVisibility.PRIVATE)
 
 		return toResponses((familyTodos + privateTodos).sortedBy { it.createdAt })
+	}
+
+	// 내가 담당자인 미완료 할 일을 중요도(우선순위)와 긴급도(마감일)로 나눈다.
+	@Transactional(readOnly = true)
+	fun getMatrix(accountId: String, familyId: UUID?): TodoMatrixResponse {
+		val me = UUID.fromString(accountId)
+		val familyTodos = familyId?.let {
+			checkMember(it, me)
+			todoRepository.findAllByFamilyIdAndAssigneeAccountIdAndIsCompletedFalseAndIsDeletedFalse(it, me)
+		}.orEmpty()
+		val privateTodos =
+			todoRepository.findAllByAssigneeAccountIdAndVisibilityAndIsCompletedFalseAndIsDeletedFalse(me, TodoVisibility.PRIVATE)
+
+		val urgentUntil = LocalDate.now().plusDays(1)
+		val todos = toResponses(
+			(familyTodos + privateTodos).sortedWith(
+				compareBy<Todo, LocalDate?>(nullsLast()) { it.dueDate }.thenBy { it.createdAt },
+			),
+		)
+		val (important, notImportant) = todos.partition { it.priority == TodoPriority.HIGH || it.priority == TodoPriority.MEDIUM }
+		fun isUrgent(todo: TodoResponse) = todo.dueDate?.let { !it.isAfter(urgentUntil) } ?: false
+
+		return TodoMatrixResponse(
+			importantUrgent = important.filter(::isUrgent),
+			importantNotUrgent = important.filterNot(::isUrgent),
+			notImportantUrgent = notImportant.filter(::isUrgent),
+			notImportantNotUrgent = notImportant.filterNot(::isUrgent),
+		)
 	}
 
 	@Transactional(readOnly = true)

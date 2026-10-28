@@ -11,6 +11,16 @@ interface TodoRepository : JpaRepository<Todo, UUID> {
 
 	fun findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId: UUID): List<Todo>
 
+	fun findAllByFamilyIdAndAssigneeAccountIdAndIsCompletedFalseAndIsDeletedFalse(
+		familyId: UUID,
+		assigneeAccountId: UUID,
+	): List<Todo>
+
+	fun findAllByAssigneeAccountIdAndVisibilityAndIsCompletedFalseAndIsDeletedFalse(
+		assigneeAccountId: UUID,
+		visibility: TodoVisibility,
+	): List<Todo>
+
 	fun findAllByCreatorAccountIdAndVisibilityAndIsDeletedFalseOrderByCreatedAt(
 		creatorAccountId: UUID,
 		visibility: TodoVisibility,
