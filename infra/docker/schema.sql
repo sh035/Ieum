@@ -2,7 +2,7 @@
 CREATE SCHEMA account;
 CREATE SCHEMA family;
 CREATE SCHEMA planner;
-CREATE SCHEMA shopping;
+CREATE SCHEMA grocery;
 CREATE SCHEMA expense;
 CREATE SCHEMA notification;
 

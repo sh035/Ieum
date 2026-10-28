@@ -5,7 +5,7 @@ include(
 	"services:account",
 	"services:family",
 	"services:planner",
-	"services:shopping",
+	"services:grocery",
 	"services:expense",
 	"services:notification",
 	"libs:web",
