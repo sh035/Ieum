@@ -13,5 +13,6 @@ enum class GroceryErrorCode(
 	INVALID_STORAGE_NAME(HttpStatus.BAD_REQUEST, "Storage name must be 1 to 50 characters."),
 	STORAGE_NAME_DUPLICATED(HttpStatus.CONFLICT, "Storage name already exists in the family."),
 	STORAGE_NOT_EMPTY(HttpStatus.CONFLICT, "Storage still has items."),
+	GROCERY_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "Grocery item not found."),
 	FAMILY_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Family service unavailable."),
 }
