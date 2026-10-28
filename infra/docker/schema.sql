@@ -195,3 +195,42 @@ CREATE TABLE grocery.receipt_item_mapping
 CREATE UNIQUE INDEX uk_receipt_item_mapping_family_id_raw_name
 	ON grocery.receipt_item_mapping (family_id, raw_name)
 	WHERE is_deleted = false;
+
+-- PRIVATE 지출은 가족 가계부 안에서 작성자만 보고, 결제한 사람도 작성자 본인이다.
+CREATE TABLE expense.expense
+(
+	expense_id         uuid PRIMARY KEY,
+	family_id          uuid         NOT NULL,
+	creator_account_id uuid         NOT NULL,
+	payer_account_id   uuid         NOT NULL,
+	title              varchar(100) NOT NULL,
+	memo               text,
+	amount             integer      NOT NULL CHECK (amount > 0),
+	category           varchar(30)  NOT NULL,
+	visibility         varchar(20)  NOT NULL,
+	spent_date         date         NOT NULL,
+	created_at         timestamp(6) NOT NULL,
+	updated_at         timestamp(6),
+	is_deleted         boolean      NOT NULL DEFAULT false
+);
+
+CREATE INDEX idx_expense_family_id_spent_date ON expense.expense (family_id, spent_date);
+
+-- account_id 가 없으면 가족 예산, 있으면 그 사람의 개인 예산이다.
+-- budget_month 가 없으면 매달 적용되는 기본 예산, 있으면 그 달(1일)에만 적용되는 예산이다.
+CREATE TABLE expense.budget
+(
+	budget_id    uuid PRIMARY KEY,
+	family_id    uuid         NOT NULL,
+	account_id   uuid,
+	budget_month date,
+	amount       integer      NOT NULL CHECK (amount >= 0),
+	created_at   timestamp(6) NOT NULL,
+	updated_at   timestamp(6),
+	is_deleted   boolean      NOT NULL DEFAULT false,
+	CONSTRAINT ck_budget_month_first_day CHECK (budget_month IS NULL OR extract(DAY FROM budget_month) = 1)
+);
+
+CREATE UNIQUE INDEX uk_budget_family_id_account_id_budget_month
+	ON expense.budget (family_id, account_id, budget_month) NULLS NOT DISTINCT
+	WHERE is_deleted = false;

@@ -12,5 +12,7 @@ interface FamilyMemberRepository : JpaRepository<FamilyMember, UUID> {
 
 	fun findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId: UUID, accountId: UUID): FamilyMember?
 
+	fun findByFamilyMemberIdAndFamilyIdAndIsDeletedFalse(familyMemberId: UUID, familyId: UUID): FamilyMember?
+
 	fun existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId: UUID, accountId: UUID): Boolean
 }

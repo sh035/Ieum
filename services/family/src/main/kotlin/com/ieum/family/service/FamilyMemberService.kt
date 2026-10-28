@@ -1,7 +1,10 @@
 package com.ieum.family.service
 
+import com.ieum.family.controller.dto.request.UpdateFamilyMemberRoleRequest
 import com.ieum.family.controller.dto.response.FamilyMemberResponse
 import com.ieum.family.controller.dto.response.FamilyMemberRoleResponse
+import com.ieum.family.domain.entity.FamilyMember
+import com.ieum.family.domain.enums.FamilyRole
 import com.ieum.family.exception.FamilyErrorCode
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.web.exception.IeumException
@@ -21,14 +24,30 @@ class FamilyMemberService(
 			throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
 		}
 
-		return members.map {
-			FamilyMemberResponse(
-				familyMemberId = requireNotNull(it.familyMemberId),
-				accountId = it.accountId,
-				role = it.role,
-				joinedAt = it.createdAt,
-			)
+		return members.map { it.toResponse() }
+	}
+
+	// OWNER 가 구성원을 MEMBER <-> MANAGER 로 바꾼다. OWNER 역할은 이 API 로 주거나 뺏을 수 없다.
+	fun updateRole(
+		accountId: String,
+		familyId: UUID,
+		familyMemberId: UUID,
+		request: UpdateFamilyMemberRoleRequest,
+	): FamilyMemberResponse {
+		val requester = familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, UUID.fromString(accountId))
+			?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
+		if (requester.role != FamilyRole.OWNER) {
+			throw IeumException(FamilyErrorCode.FAMILY_ACCESS_DENIED)
 		}
+
+		val member = familyMemberRepository.findByFamilyMemberIdAndFamilyIdAndIsDeletedFalse(familyMemberId, familyId)
+			?: throw IeumException(FamilyErrorCode.FAMILY_MEMBER_NOT_FOUND)
+		if (request.role == FamilyRole.OWNER || member.role == FamilyRole.OWNER) {
+			throw IeumException(FamilyErrorCode.INVALID_ROLE_CHANGE)
+		}
+
+		member.role = request.role
+		return familyMemberRepository.save(member).toResponse()
 	}
 
 	fun getRole(familyId: UUID, accountId: UUID): FamilyMemberRoleResponse {
@@ -37,4 +56,11 @@ class FamilyMemberService(
 
 		return FamilyMemberRoleResponse(role = member.role)
 	}
+
+	private fun FamilyMember.toResponse() = FamilyMemberResponse(
+		familyMemberId = requireNotNull(familyMemberId),
+		accountId = accountId,
+		role = role,
+		joinedAt = createdAt,
+	)
 }
