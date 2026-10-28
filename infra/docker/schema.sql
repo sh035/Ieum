@@ -86,3 +86,16 @@ CREATE TABLE planner.todo
 
 CREATE INDEX idx_todo_family_id ON planner.todo (family_id);
 CREATE INDEX idx_todo_creator_account_id ON planner.todo (creator_account_id);
+
+CREATE TABLE planner.todo_checklist_item
+(
+	todo_checklist_item_id uuid PRIMARY KEY,
+	todo_id                uuid         NOT NULL REFERENCES planner.todo (todo_id),
+	content                varchar(255) NOT NULL,
+	is_completed           boolean      NOT NULL DEFAULT false,
+	created_at             timestamp(6) NOT NULL,
+	updated_at             timestamp(6),
+	is_deleted             boolean      NOT NULL DEFAULT false
+);
+
+CREATE INDEX idx_todo_checklist_item_todo_id ON planner.todo_checklist_item (todo_id);

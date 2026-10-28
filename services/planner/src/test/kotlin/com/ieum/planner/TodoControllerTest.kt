@@ -1,5 +1,6 @@
 package com.ieum.planner
 
+import com.ieum.planner.repository.TodoChecklistItemRepository
 import com.ieum.planner.repository.TodoRepository
 import com.ieum.planner.service.FamilyClient
 import org.junit.jupiter.api.BeforeEach
@@ -23,6 +24,7 @@ import java.util.UUID
 class TodoControllerTest @Autowired constructor(
 	private val mockMvc: MockMvc,
 	private val todoRepository: TodoRepository,
+	private val todoChecklistItemRepository: TodoChecklistItemRepository,
 	private val objectMapper: ObjectMapper,
 ) : PostgresTestSupport() {
 
@@ -36,6 +38,7 @@ class TodoControllerTest @Autowired constructor(
 
 	@BeforeEach
 	fun setUp() {
+		todoChecklistItemRepository.deleteAll()
 		todoRepository.deleteAll()
 		`when`(familyClient.isMember(familyId, me)).thenReturn(true)
 		`when`(familyClient.isMember(familyId, member)).thenReturn(true)
@@ -71,6 +74,7 @@ class TodoControllerTest @Autowired constructor(
 			jsonPath("\$.data.assigneeAccountId") { value(member.toString()) }
 			jsonPath("\$.data.priority") { value("NONE") }
 			jsonPath("\$.data.isCompleted") { value(false) }
+			jsonPath("\$.data.checklistItems") { isEmpty() }
 		}
 	}
 

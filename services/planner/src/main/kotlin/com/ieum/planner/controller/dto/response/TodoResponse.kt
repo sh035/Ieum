@@ -18,4 +18,5 @@ data class TodoResponse(
 	val dueDate: LocalDate?,
 	val dueTime: LocalTime?,
 	val isCompleted: Boolean,
+	val checklistItems: List<TodoChecklistItemResponse>,
 )

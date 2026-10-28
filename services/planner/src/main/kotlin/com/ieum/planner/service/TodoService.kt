@@ -2,10 +2,13 @@ package com.ieum.planner.service
 
 import com.ieum.planner.controller.dto.request.CreateTodoRequest
 import com.ieum.planner.controller.dto.request.UpdateTodoRequest
+import com.ieum.planner.controller.dto.response.TodoChecklistItemResponse
 import com.ieum.planner.controller.dto.response.TodoResponse
 import com.ieum.planner.domain.entity.Todo
+import com.ieum.planner.domain.entity.TodoChecklistItem
 import com.ieum.planner.domain.enums.TodoVisibility
 import com.ieum.planner.exception.PlannerErrorCode
+import com.ieum.planner.repository.TodoChecklistItemRepository
 import com.ieum.planner.repository.TodoRepository
 import com.ieum.web.exception.IeumException
 import org.slf4j.LoggerFactory
@@ -18,6 +21,7 @@ import java.util.UUID
 @Service
 class TodoService(
 	private val todoRepository: TodoRepository,
+	private val todoChecklistItemRepository: TodoChecklistItemRepository,
 	private val familyClient: FamilyClient,
 ) {
 
@@ -49,7 +53,7 @@ class TodoService(
 
 		log.debug("Todo created. todoId={}, accountId={}", todo.todoId, accountId)
 
-		return todo.toResponse()
+		return todo.toResponse(checklistItems = emptyList())
 	}
 
 	// 가족을 지정하면 그 가족의 할 일도 함께 반환한다. 내 개인 할 일은 항상 포함한다.
@@ -63,11 +67,12 @@ class TodoService(
 		val privateTodos =
 			todoRepository.findAllByCreatorAccountIdAndVisibilityAndIsDeletedFalseOrderByCreatedAt(me, TodoVisibility.PRIVATE)
 
-		return (familyTodos + privateTodos).sortedBy { it.createdAt }.map { it.toResponse() }
+		return toResponses((familyTodos + privateTodos).sortedBy { it.createdAt })
 	}
 
+	@Transactional(readOnly = true)
 	fun getTodo(accountId: String, todoId: UUID): TodoResponse =
-		findAccessibleTodo(UUID.fromString(accountId), todoId).toResponse()
+		toResponses(listOf(findAccessibleTodo(UUID.fromString(accountId), todoId))).single()
 
 	fun updateTodo(accountId: String, todoId: UUID, request: UpdateTodoRequest): TodoResponse {
 		val me = UUID.fromString(accountId)
@@ -84,7 +89,7 @@ class TodoService(
 		todo.dueDate = request.dueDate
 		todo.dueTime = request.dueTime
 
-		return todoRepository.save(todo).toResponse()
+		return toResponses(listOf(todoRepository.save(todo))).single()
 	}
 
 	fun deleteTodo(accountId: String, todoId: UUID) {
@@ -99,8 +104,8 @@ class TodoService(
 		todoRepository.save(todo)
 	}
 
-	// 볼 수 없는 할 일은 존재 자체를 숨긴다.
-	private fun findAccessibleTodo(me: UUID, todoId: UUID): Todo {
+	// 볼 수 없는 할 일은 존재 자체를 숨긴다. 체크리스트도 같은 권한을 따른다.
+	fun findAccessibleTodo(me: UUID, todoId: UUID): Todo {
 		val todo = todoRepository.findByTodoIdAndIsDeletedFalse(todoId)
 			?: throw IeumException(PlannerErrorCode.TODO_NOT_FOUND)
 
@@ -145,7 +150,18 @@ class TodoService(
 		}
 	}
 
-	private fun Todo.toResponse() = TodoResponse(
+	// 체크리스트는 할 일 수와 상관없이 한 번에 조회한다.
+	private fun toResponses(todos: List<Todo>): List<TodoResponse> {
+		if (todos.isEmpty()) return emptyList()
+
+		val checklistItems = todoChecklistItemRepository
+			.findAllByTodoIdInAndIsDeletedFalseOrderByCreatedAt(todos.map { requireNotNull(it.todoId) })
+			.groupBy { it.todoId }
+
+		return todos.map { it.toResponse(checklistItems[it.todoId].orEmpty()) }
+	}
+
+	private fun Todo.toResponse(checklistItems: List<TodoChecklistItem>) = TodoResponse(
 		todoId = requireNotNull(todoId),
 		familyId = familyId,
 		creatorAccountId = creatorAccountId,
@@ -157,5 +173,12 @@ class TodoService(
 		dueDate = dueDate,
 		dueTime = dueTime,
 		isCompleted = isCompleted,
+		checklistItems = checklistItems.map {
+			TodoChecklistItemResponse(
+				todoChecklistItemId = requireNotNull(it.todoChecklistItemId),
+				content = it.content,
+				isCompleted = it.isCompleted,
+			)
+		},
 	)
 }

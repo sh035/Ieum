@@ -9,6 +9,7 @@ enum class PlannerErrorCode(
 ) : ErrorCode {
 
 	TODO_NOT_FOUND(HttpStatus.NOT_FOUND, "Todo not found."),
+	CHECKLIST_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "Checklist item not found."),
 	FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "Family not found."),
 	INVALID_TODO_FAMILY(HttpStatus.BAD_REQUEST, "Family todo needs familyId and private todo must not have one."),
 	ASSIGNEE_REQUIRED(HttpStatus.BAD_REQUEST, "Family todo needs an assignee."),
