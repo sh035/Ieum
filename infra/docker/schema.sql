@@ -140,3 +140,58 @@ CREATE TABLE planner.schedule_attendee
 CREATE UNIQUE INDEX uk_schedule_attendee_schedule_id_account_id
 	ON planner.schedule_attendee (schedule_id, account_id)
 	WHERE is_deleted = false;
+
+-- 보관 장소는 가족이 직접 만들어 쓴다.
+CREATE TABLE grocery.storage
+(
+	storage_id uuid PRIMARY KEY,
+	family_id  uuid         NOT NULL,
+	name       varchar(50)  NOT NULL,
+	created_at timestamp(6) NOT NULL,
+	updated_at timestamp(6),
+	is_deleted boolean      NOT NULL DEFAULT false
+);
+
+CREATE UNIQUE INDEX uk_storage_family_id_name
+	ON grocery.storage (family_id, name)
+	WHERE is_deleted = false;
+
+-- PRIVATE 물건은 가족 장소 안에서 작성자만 본다. family_id 는 장소에서 복사한다.
+CREATE TABLE grocery.grocery_item
+(
+	grocery_item_id    uuid PRIMARY KEY,
+	storage_id         uuid         NOT NULL REFERENCES grocery.storage (storage_id),
+	family_id          uuid         NOT NULL,
+	creator_account_id uuid         NOT NULL,
+	name               varchar(100) NOT NULL,
+	category           varchar(30)  NOT NULL,
+	visibility         varchar(20)  NOT NULL,
+	quantity           integer      NOT NULL CHECK (quantity > 0),
+	purchase_price     integer CHECK (purchase_price >= 0),
+	purchase_date      date,
+	expiry_date        date,
+	created_at         timestamp(6) NOT NULL,
+	updated_at         timestamp(6),
+	is_deleted         boolean      NOT NULL DEFAULT false
+);
+
+CREATE INDEX idx_grocery_item_storage_id ON grocery.grocery_item (storage_id);
+CREATE INDEX idx_grocery_item_family_id ON grocery.grocery_item (family_id);
+
+-- 영수증 원문을 가족이 확정한 이름 / 카테고리 / 장소로 기억해 다음 인식의 기본값으로 쓴다.
+CREATE TABLE grocery.receipt_item_mapping
+(
+	receipt_item_mapping_id uuid PRIMARY KEY,
+	family_id               uuid         NOT NULL,
+	raw_name                varchar(255) NOT NULL,
+	name                    varchar(100) NOT NULL,
+	category                varchar(30)  NOT NULL,
+	storage_id              uuid         NOT NULL REFERENCES grocery.storage (storage_id),
+	created_at              timestamp(6) NOT NULL,
+	updated_at              timestamp(6),
+	is_deleted              boolean      NOT NULL DEFAULT false
+);
+
+CREATE UNIQUE INDEX uk_receipt_item_mapping_family_id_raw_name
+	ON grocery.receipt_item_mapping (family_id, raw_name)
+	WHERE is_deleted = false;

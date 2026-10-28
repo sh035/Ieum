@@ -3,7 +3,7 @@ package com.ieum.grocery
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = ["com.ieum"])
 class GroceryApplication
 
 fun main(args: Array<String>) {
