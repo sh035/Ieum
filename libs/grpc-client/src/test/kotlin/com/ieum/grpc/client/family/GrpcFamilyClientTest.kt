@@ -1,6 +1,8 @@
 package com.ieum.grpc.client.family
 
 import com.ieum.proto.family.v1.FamilyInternalServiceGrpc
+import com.ieum.proto.family.v1.GetFamilyRequest
+import com.ieum.proto.family.v1.GetFamilyResponse
 import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRoleResponse
 import com.ieum.proto.family.v1.GetMemberRolesRequest
@@ -25,6 +27,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.ieum.proto.family.v1.FamilyMember as ProtoFamilyMember
 import com.ieum.proto.family.v1.FamilyRole as ProtoFamilyRole
 
 class GrpcFamilyClientTest {
@@ -44,6 +47,7 @@ class GrpcFamilyClientTest {
 	// family 응답을 흉내 내는 in-process 서버에 붙은 클라이언트를 만든다.
 	private fun clientRespondingWith(
 		rolesRespond: (GetMemberRolesRequest, StreamObserver<GetMemberRolesResponse>) -> Unit = { _, _ -> },
+		familyRespond: (StreamObserver<GetFamilyResponse>) -> Unit = { },
 		respond: (StreamObserver<GetMemberRoleResponse>) -> Unit = { },
 	): GrpcFamilyClient {
 		server = InProcessServerBuilder.forName(name)
@@ -54,6 +58,10 @@ class GrpcFamilyClientTest {
 
 				override fun getMemberRoles(request: GetMemberRolesRequest, observer: StreamObserver<GetMemberRolesResponse>) {
 					rolesRespond(request, observer)
+				}
+
+				override fun getFamily(request: GetFamilyRequest, observer: StreamObserver<GetFamilyResponse>) {
+					familyRespond(observer)
 				}
 			})
 			.build()
@@ -138,6 +146,32 @@ class GrpcFamilyClientTest {
 		assertEquals(emptyMap(), client.getRoles(familyId, emptyList()))
 		assertFalse(called)
 		val e = assertFailsWith<IeumException> { client.getRoles(familyId, listOf(accountId)) }
+		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, e.errorCode.status)
+	}
+
+	@Test
+	fun `가족 정보를 도메인 타입으로 바꾼다`() {
+		val other = UUID.randomUUID()
+		val client = clientRespondingWith(familyRespond = {
+			it.onNext(
+				GetFamilyResponse.newBuilder()
+					.setName("우리집")
+					.addMembers(ProtoFamilyMember.newBuilder().setAccountId(accountId.toString()).setRole(ProtoFamilyRole.FAMILY_ROLE_OWNER))
+					.addMembers(ProtoFamilyMember.newBuilder().setAccountId(other.toString()).setRole(ProtoFamilyRole.FAMILY_ROLE_MEMBER))
+					.build(),
+			)
+			it.onCompleted()
+		})
+
+		assertEquals(FamilyInfo("우리집", mapOf(accountId to FamilyRole.OWNER, other to FamilyRole.MEMBER)), client.getFamily(familyId))
+	}
+
+	@Test
+	fun `없는 가족은 null 이고 가족 조회 실패는 503`() {
+		assertNull(clientRespondingWith(familyRespond = { it.onError(Status.NOT_FOUND.asRuntimeException()) }).getFamily(familyId))
+		tearDown()
+		val client = clientRespondingWith(familyRespond = { it.onError(Status.INTERNAL.asRuntimeException()) })
+		val e = assertFailsWith<IeumException> { client.getFamily(familyId) }
 		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, e.errorCode.status)
 	}
 }
