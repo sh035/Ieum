@@ -10,5 +10,7 @@ include(
 	"services:notification",
 	"libs:web",
 	"libs:security",
+	"libs:proto",
+	"libs:grpc-client",
 //	"libs:events",
 )

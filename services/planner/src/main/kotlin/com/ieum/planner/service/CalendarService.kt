@@ -1,5 +1,6 @@
 package com.ieum.planner.service
 
+import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.planner.controller.dto.response.CalendarResponse
 import com.ieum.planner.exception.PlannerErrorCode
 import com.ieum.web.exception.IeumException

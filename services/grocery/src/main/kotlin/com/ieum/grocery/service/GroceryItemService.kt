@@ -1,5 +1,6 @@
 package com.ieum.grocery.service
 
+import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.grocery.controller.dto.request.CreateGroceryItemRequest
 import com.ieum.grocery.controller.dto.request.UpdateGroceryItemRequest
 import com.ieum.grocery.controller.dto.response.GroceryItemResponse

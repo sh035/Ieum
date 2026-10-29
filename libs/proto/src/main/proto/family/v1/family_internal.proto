@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package ieum.family.v1;
+
+option java_multiple_files = true;
+option java_package = "com.ieum.proto.family.v1";
+
+// 서비스 간 호출 전용. Gateway 에 노출하지 않는다.
+service FamilyInternalService {
+  // 구성원이 아니면 NOT_FOUND 로 응답한다.
+  rpc GetMemberRole(GetMemberRoleRequest) returns (GetMemberRoleResponse);
+
+  // 여러 계정을 한 번에 확인한다. 구성원인 계정만 담아 응답한다.
+  rpc GetMemberRoles(GetMemberRolesRequest) returns (GetMemberRolesResponse);
+}
+
+message GetMemberRoleRequest {
+  string family_id = 1;
+  string account_id = 2;
+}
+
+message GetMemberRoleResponse {
+  FamilyRole role = 1;
+}
+
+message GetMemberRolesRequest {
+  string family_id = 1;
+  repeated string account_ids = 2;
+}
+
+message GetMemberRolesResponse {
+  // key 는 account_id
+  map<string, FamilyRole> roles = 1;
+}
+
+enum FamilyRole {
+  FAMILY_ROLE_UNSPECIFIED = 0;
+  FAMILY_ROLE_OWNER = 1;
+  FAMILY_ROLE_MANAGER = 2;
+  FAMILY_ROLE_MEMBER = 3;
+}

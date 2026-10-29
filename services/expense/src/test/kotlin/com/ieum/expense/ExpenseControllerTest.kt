@@ -1,7 +1,7 @@
 package com.ieum.expense
 
 import com.ieum.expense.repository.ExpenseRepository
-import com.ieum.expense.service.FamilyClient
+import com.ieum.grpc.client.family.FamilyClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.`when`

@@ -1,5 +1,6 @@
 package com.ieum.planner.service
 
+import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.planner.controller.dto.request.CreateScheduleRequest
 import com.ieum.planner.controller.dto.request.UpdateScheduleRequest
 import com.ieum.planner.controller.dto.response.ScheduleResponse
@@ -161,7 +162,7 @@ class ScheduleService(
 			throw IeumException(PlannerErrorCode.ATTENDEE_REQUIRED)
 		}
 		val added = attendees.filter { it != me && it !in alreadyAttending }
-		if (added.any { !familyClient.isMember(familyId, it) }) {
+		if (!familyClient.getRoles(familyId, added).keys.containsAll(added)) {
 			throw IeumException(PlannerErrorCode.INVALID_ATTENDEE)
 		}
 		return attendees
