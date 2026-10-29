@@ -13,16 +13,14 @@ spring:
     properties:
       hibernate:
         default_schema: expense
-  http:
-    clients:
-      connect-timeout: 2s
-      read-timeout: 3s
+  grpc:
+    client:
+      channel:
+        family:
+          target: ${FAMILY_GRPC_TARGET}
 
 server:
   port: 8085
 
 jwt:
   public-key: ${JWT_PUBLIC_KEY}
-
-family:
-  url: ${FAMILY_URL}

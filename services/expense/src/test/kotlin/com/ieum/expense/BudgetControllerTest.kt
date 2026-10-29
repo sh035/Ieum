@@ -2,11 +2,11 @@ package com.ieum.expense
 
 import com.ieum.expense.domain.entity.Expense
 import com.ieum.expense.domain.enums.ExpenseCategory
-import com.ieum.expense.domain.enums.FamilyRole
+import com.ieum.grpc.client.family.FamilyRole
 import com.ieum.expense.domain.enums.Visibility
 import com.ieum.expense.repository.BudgetRepository
 import com.ieum.expense.repository.ExpenseRepository
-import com.ieum.expense.service.FamilyClient
+import com.ieum.grpc.client.family.FamilyClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.`when`

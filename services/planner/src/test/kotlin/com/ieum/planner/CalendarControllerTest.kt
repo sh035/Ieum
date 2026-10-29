@@ -4,7 +4,7 @@ import com.ieum.planner.repository.ScheduleAttendeeRepository
 import com.ieum.planner.repository.ScheduleRepository
 import com.ieum.planner.repository.TodoChecklistItemRepository
 import com.ieum.planner.repository.TodoRepository
-import com.ieum.planner.service.FamilyClient
+import com.ieum.grpc.client.family.FamilyClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.`when`

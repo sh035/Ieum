@@ -5,7 +5,7 @@ import com.ieum.grocery.domain.enums.GroceryCategory
 import com.ieum.grocery.domain.enums.Visibility
 import com.ieum.grocery.repository.GroceryItemRepository
 import com.ieum.grocery.repository.StorageRepository
-import com.ieum.grocery.service.FamilyClient
+import com.ieum.grpc.client.family.FamilyClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.`when`

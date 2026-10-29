@@ -57,6 +57,11 @@ class FamilyMemberService(
 		return FamilyMemberRoleResponse(role = member.role)
 	}
 
+	// 구성원이 아닌 계정은 결과에서 빠진다.
+	fun getRoles(familyId: UUID, accountIds: Collection<UUID>): Map<UUID, FamilyRole> =
+		familyMemberRepository.findAllByFamilyIdAndAccountIdInAndIsDeletedFalse(familyId, accountIds)
+			.associate { it.accountId to it.role }
+
 	private fun FamilyMember.toResponse() = FamilyMemberResponse(
 		familyMemberId = requireNotNull(familyMemberId),
 		accountId = accountId,

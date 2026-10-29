@@ -1,10 +1,11 @@
 package com.ieum.expense.service
 
+import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.expense.controller.dto.request.UpdateBudgetRequest
 import com.ieum.expense.controller.dto.response.BudgetResponse
 import com.ieum.expense.domain.entity.Budget
 import com.ieum.expense.domain.enums.BudgetScope
-import com.ieum.expense.domain.enums.FamilyRole
+import com.ieum.grpc.client.family.FamilyRole
 import com.ieum.expense.exception.ExpenseErrorCode
 import com.ieum.expense.repository.BudgetRepository
 import com.ieum.web.exception.IeumException

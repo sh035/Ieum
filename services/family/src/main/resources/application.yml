@@ -17,5 +17,8 @@ spring:
 server:
   port: 8082
 
+# 서비스 간 호출을 받는 gRPC 포트. REST 포트와 짝을 맞춘다.
+spring.grpc.server.port: 9082
+
 jwt:
   public-key: ${JWT_PUBLIC_KEY}

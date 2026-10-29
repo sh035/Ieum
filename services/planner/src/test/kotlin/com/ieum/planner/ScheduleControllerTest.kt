@@ -2,10 +2,13 @@ package com.ieum.planner
 
 import com.ieum.planner.repository.ScheduleAttendeeRepository
 import com.ieum.planner.repository.ScheduleRepository
-import com.ieum.planner.service.FamilyClient
+import com.ieum.grpc.client.family.FamilyClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.hamcrest.Matchers.containsInAnyOrder
+import com.ieum.grpc.client.family.FamilyRole
+import org.mockito.ArgumentMatchers.anyCollection
+import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -37,12 +40,17 @@ class ScheduleControllerTest @Autowired constructor(
 	private val member = UUID.randomUUID()
 	private val member2 = UUID.randomUUID()
 	private val outsider = UUID.randomUUID()
+	private val members = mutableSetOf(me, member, member2)
 
 	@BeforeEach
 	fun setUp() {
 		scheduleAttendeeRepository.deleteAll()
 		scheduleRepository.deleteAll()
 		listOf(me, member, member2).forEach { `when`(familyClient.isMember(familyId, it)).thenReturn(true) }
+		// eq() 는 matcher 를 등록하고 null 을 돌려줘서 Kotlin non-null 인자에 그대로 넣을 수 없다.
+		`when`(familyClient.getRoles(eq(familyId) ?: familyId, anyCollection())).thenAnswer { invocation ->
+			invocation.getArgument<Collection<UUID>>(1).filter { it in members }.associateWith { FamilyRole.MEMBER }
+		}
 	}
 
 	private fun create(body: String, accountId: UUID = me) = mockMvc.post("/api/v1/schedule") {
@@ -173,6 +181,7 @@ class ScheduleControllerTest @Autowired constructor(
 	fun `참석자가 가족을 나가도 참석자를 그대로 두면 수정할 수 있다`() {
 		val scheduleId = createId(familySchedule(attendees = listOf(me, member)))
 		`when`(familyClient.isMember(familyId, member)).thenReturn(false)
+		members -= member
 
 		mockMvc.patch("/api/v1/schedule/$scheduleId") {
 			header("Authorization", "Bearer ${accessToken(me)}")
