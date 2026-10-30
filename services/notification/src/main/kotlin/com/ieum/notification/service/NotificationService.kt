@@ -7,6 +7,7 @@ import com.ieum.grpc.client.account.AccountClient
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.notification.domain.entity.Notification
 import com.ieum.notification.repository.NotificationRepository
+import com.ieum.notification.service.delivery.NotificationSender
 import com.ieum.web.exception.IeumException
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
@@ -19,6 +20,7 @@ class NotificationService(
 	private val composer: NotificationMessageComposer,
 	private val accountClient: AccountClient,
 	private val familyClient: FamilyClient,
+	private val senders: List<NotificationSender>,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
@@ -40,7 +42,7 @@ class NotificationService(
 		val message = composer.compose(type, data, nickname, familyName)
 
 		recipients.forEach { accountId ->
-			try {
+			val saved = try {
 				notificationRepository.saveAndFlush(
 					Notification(
 						accountId = accountId,
@@ -59,6 +61,19 @@ class NotificationService(
 					throw e
 				}
 				log.debug("Duplicate notification skipped. accountId={}, dedupKey={}", accountId, dedupKey)
+				return@forEach
+			}
+			deliver(saved)
+		}
+	}
+
+	// 전달 실패는 저장된 알림을 되돌릴 이유가 아니라서, sender 마다 따로 잡고 다음으로 넘어간다.
+	private fun deliver(notification: Notification) {
+		senders.forEach { sender ->
+			try {
+				sender.send(notification)
+			} catch (e: Exception) {
+				log.warn("Notification delivery failed. sender={}, notificationId={}", sender.javaClass.simpleName, notification.notificationId, e)
 			}
 		}
 	}

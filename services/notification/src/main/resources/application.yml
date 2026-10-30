@@ -18,6 +18,10 @@ spring:
     consumer:
       group-id: notification
       auto-offset-reset: earliest
+    producer:
+      properties:
+        # Kafka 장애 시 리스너가 오래 막히지 않게 발행 대기를 2초로 끊는다.
+        max.block.ms: 2000
   grpc:
     client:
       channel:
@@ -31,3 +35,10 @@ server:
 
 jwt:
   public-key: ${JWT_PUBLIC_KEY}
+
+notification:
+  delivery:
+    auto-offset-reset: latest
+
+firebase:
+  credentials: ${FIREBASE_CREDENTIALS:}

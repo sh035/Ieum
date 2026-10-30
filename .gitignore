@@ -53,3 +53,6 @@ CLAUDE.md
 *.pem
 *.p12
 *.key
+
+# Firebase 서비스 계정 키
+*firebase-adminsdk*.json

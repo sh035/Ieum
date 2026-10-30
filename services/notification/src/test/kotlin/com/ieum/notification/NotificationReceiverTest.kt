@@ -9,7 +9,9 @@ import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.account.AccountClient
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.grpc.client.family.FamilyInfo
+import com.ieum.notification.domain.entity.Notification
 import com.ieum.notification.repository.NotificationRepository
+import com.ieum.notification.service.delivery.NotificationSender
 import com.ieum.web.exception.IeumException
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -21,21 +23,51 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
+import org.springframework.core.annotation.Order
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import tools.jackson.databind.ObjectMapper
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @SpringBootTest
+@Import(NotificationReceiverTest.SenderConfig::class)
 class NotificationReceiverTest @Autowired constructor(
 	private val kafkaTemplate: KafkaTemplate<String, String>,
 	private val notificationRepository: NotificationRepository,
 	private val objectMapper: ObjectMapper,
+	private val recordingSender: RecordingSender,
 ) : PostgresKafkaTestSupport() {
+
+	class RecordingSender : NotificationSender {
+		val received = CopyOnWriteArrayList<UUID>()
+
+		override fun send(notification: Notification) {
+			received += requireNotNull(notification.notificationId)
+		}
+	}
+
+	@TestConfiguration
+	class SenderConfig {
+
+		// 실패하는 sender 를 먼저 불러도 뒤의 sender 가 받는지 본다.
+		@Bean
+		@Order(0)
+		fun failingSender() = object : NotificationSender {
+			override fun send(notification: Notification) = throw IllegalStateException("sender down")
+		}
+
+		@Bean
+		@Order(1)
+		fun recordingSender() = RecordingSender()
+	}
 
 	@MockitoBean
 	private lateinit var accountClient: AccountClient
@@ -52,6 +84,7 @@ class NotificationReceiverTest @Autowired constructor(
 	@BeforeEach
 	fun setUp() {
 		notificationRepository.deleteAllInBatch()
+		recordingSender.received.clear()
 		`when`(accountClient.getNicknames(setOf(mom))).thenReturn(mapOf(mom to "엄마"))
 		`when`(familyClient.getFamily(familyId)).thenReturn(FamilyInfo("우리집", emptyMap()))
 	}
@@ -111,6 +144,36 @@ class NotificationReceiverTest @Autowired constructor(
 			assertEquals(todoId, it.targetId)
 			assertEquals(false, it.isRead)
 		}
+	}
+
+	private fun awaitDelivered(expected: Int) {
+		val deadline = System.currentTimeMillis() + 10_000
+		while (recordingSender.received.size != expected && System.currentTimeMillis() < deadline) {
+			Thread.sleep(100)
+		}
+		assertEquals(expected, recordingSender.received.size)
+	}
+
+	@Test
+	fun `저장한 알림마다 전달하고 앞 sender 가 실패해도 다음 sender 는 받는다`() {
+		send(event())
+
+		awaitCount(2)
+		awaitDelivered(2)
+		assertEquals(notificationRepository.findAll().map { it.notificationId }.toSet(), recordingSender.received.toSet())
+	}
+
+	@Test
+	fun `이미 저장한 이벤트가 다시 오면 다시 전달하지 않는다`() {
+		val event = event(recipients = listOf(dad))
+		send(event)
+		awaitDelivered(1)
+		send(event)
+		send(event(recipients = listOf(kid)))
+
+		awaitDelivered(2)
+		Thread.sleep(500)
+		assertEquals(2, recordingSender.received.size)
 	}
 
 	@Test
