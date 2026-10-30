@@ -23,4 +23,11 @@ class PageResponseTest {
 		assertEquals(0, response.totalPage)
 		assertEquals(emptyList(), response.data)
 	}
+
+	@Test
+	fun `크기가 0이면 전체 페이지 0`() {
+		val response = PageResponse(HttpStatus.OK, data = emptyList<String>(), totalCount = 5, currentPage = 1, size = 0)
+
+		assertEquals(0, response.totalPage)
+	}
 }

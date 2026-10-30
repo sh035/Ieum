@@ -16,6 +16,8 @@ import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -152,7 +154,19 @@ class NotificationReceiverTest @Autowired constructor(
 		assertTrue(readDlt().contains(broken))
 	}
 
-@Test
+	@Test
+	fun `이미 저장한 이벤트가 다시 오면 이름 조회를 하지 않는다`() {
+		val event = event(recipients = listOf(dad))
+		send(event)
+		awaitCount(1)
+		send(event)
+		send(event(recipients = listOf(kid), actor = dad))
+
+		awaitCount(2)
+		verify(accountClient, times(1)).getNicknames(setOf(mom))
+	}
+
+	@Test
 	fun `제목이 컬럼보다 길어도 잘라서 저장한다`() {
 		send(event(recipients = listOf(dad), subject = "가".repeat(255)))
 
@@ -181,7 +195,7 @@ class NotificationReceiverTest @Autowired constructor(
 		assertTrue(readDlt().contains(unknown))
 	}
 
-		private fun readDlt(): List<String> =
+	private fun readDlt(): List<String> =
 		KafkaConsumer<String, String>(
 			mapOf(
 				ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to kafka.bootstrapServers,

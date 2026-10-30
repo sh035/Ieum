@@ -28,6 +28,10 @@ class NotificationService(
 		val type = NotificationEventType.valueOf(event.eventType)
 		val data = event.data
 		val dedupKey = data.dedupKey ?: event.eventId.toString()
+		val recipients = data.recipientAccountIds.distinct().filterNot { notificationRepository.existsByAccountIdAndDedupKey(it, dedupKey) }
+		if (recipients.isEmpty()) {
+			return
+		}
 
 		val nickname = data.actorAccountId?.let { actor -> lookup { accountClient.getNicknames(setOf(actor))[actor] } }
 		val familyName = data.familyId
@@ -35,30 +39,28 @@ class NotificationService(
 			?.let { familyId -> lookup { familyClient.getFamily(familyId)?.name } }
 		val message = composer.compose(type, data, nickname, familyName)
 
-		data.recipientAccountIds.distinct()
-			.filterNot { notificationRepository.existsByAccountIdAndDedupKey(it, dedupKey) }
-			.forEach { accountId ->
-				try {
-					notificationRepository.saveAndFlush(
-						Notification(
-							accountId = accountId,
-							familyId = data.familyId,
-							type = type,
-							title = message.title,
-							body = message.body,
-							targetType = data.targetType,
-							targetId = data.targetId,
-							dedupKey = dedupKey,
-						),
-					)
-				} catch (e: DataIntegrityViolationException) {
-					// 동시에 같은 알림이 들어온 경우만 건너뛴다. 길이 초과 같은 다른 위반은 재시도 후 DLT 로 보낸다.
-					if ((e.mostSpecificCause as? SQLException)?.sqlState != UNIQUE_VIOLATION) {
-						throw e
-					}
-					log.debug("Duplicate notification skipped. accountId={}, dedupKey={}", accountId, dedupKey)
+		recipients.forEach { accountId ->
+			try {
+				notificationRepository.saveAndFlush(
+					Notification(
+						accountId = accountId,
+						familyId = data.familyId,
+						type = type,
+						title = message.title,
+						body = message.body,
+						targetType = data.targetType,
+						targetId = data.targetId,
+						dedupKey = dedupKey,
+					),
+				)
+			} catch (e: DataIntegrityViolationException) {
+				// 동시에 같은 알림이 들어온 경우만 건너뛴다. 길이 초과 같은 다른 위반은 재시도 후 DLT 로 보낸다.
+				if ((e.mostSpecificCause as? SQLException)?.sqlState != UNIQUE_VIOLATION) {
+					throw e
 				}
+				log.debug("Duplicate notification skipped. accountId={}, dedupKey={}", accountId, dedupKey)
 			}
+		}
 	}
 
 	// 닉네임과 가족 이름은 문구 장식이라, 조회가 실패해도 알림은 대체 문구로 저장한다.

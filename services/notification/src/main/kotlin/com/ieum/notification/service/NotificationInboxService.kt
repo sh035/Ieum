@@ -11,8 +11,12 @@ import com.ieum.web.exception.IeumException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
+import org.springframework.data.jpa.domain.PredicateSpecification
+import org.springframework.data.jpa.domain.Specification
+import org.springframework.data.jpa.domain.UpdateSpecification
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.LocalDateTime
 import java.util.UUID
 
 @Service
@@ -27,27 +31,13 @@ class NotificationInboxService(
 		// 같은 시각이면 시간순 UUID(v7) 로 순서를 고정한다.
 		val pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("notificationId")))
 
-		val notifications = when (tab) {
-			NotificationTab.ALL -> notificationRepository.findAllByAccountIdAndIsDeletedFalse(me, pageable)
-			NotificationTab.FAMILY ->
-				notificationRepository.findAllByAccountIdAndFamilyIdAndIsDeletedFalse(me, checkFamily(me, familyId), pageable)
-			NotificationTab.PERSONAL -> notificationRepository.findAllByAccountIdAndFamilyIdIsNullAndIsDeletedFalse(me, pageable)
-		}
-
-		return notifications.map { it.toResponse() }
+		return notificationRepository.findAll(Specification.where(inTab(me, tab, familyId)), pageable).map { it.toResponse() }
 	}
 
 	fun getUnreadCount(accountId: String, tab: NotificationTab, familyId: UUID?): UnreadCountResponse {
-		val me = UUID.fromString(accountId)
+		val spec = inTab(UUID.fromString(accountId), tab, familyId).and(unread())
 
-		val count = when (tab) {
-			NotificationTab.ALL -> notificationRepository.countByAccountIdAndIsReadFalseAndIsDeletedFalse(me)
-			NotificationTab.FAMILY ->
-				notificationRepository.countByAccountIdAndFamilyIdAndIsReadFalseAndIsDeletedFalse(me, checkFamily(me, familyId))
-			NotificationTab.PERSONAL -> notificationRepository.countByAccountIdAndFamilyIdIsNullAndIsReadFalseAndIsDeletedFalse(me)
-		}
-
-		return UnreadCountResponse(count)
+		return UnreadCountResponse(notificationRepository.count(spec))
 	}
 
 	fun updateRead(accountId: String, notificationId: UUID, isRead: Boolean) {
@@ -56,18 +46,17 @@ class NotificationInboxService(
 		notificationRepository.save(notification)
 	}
 
+	// 한 번의 UPDATE 로 처리해서 엔티티 @PreUpdate 를 거치지 않으니 updatedAt 을 직접 넣는다.
 	@Transactional
 	fun readAll(accountId: String, tab: NotificationTab, familyId: UUID?) {
-		val me = UUID.fromString(accountId)
+		val where = inTab(UUID.fromString(accountId), tab, familyId).and(unread())
 
-		val unread = when (tab) {
-			NotificationTab.ALL -> notificationRepository.findAllByAccountIdAndIsReadFalseAndIsDeletedFalse(me)
-			NotificationTab.FAMILY ->
-				notificationRepository.findAllByAccountIdAndFamilyIdAndIsReadFalseAndIsDeletedFalse(me, checkFamily(me, familyId))
-			NotificationTab.PERSONAL -> notificationRepository.findAllByAccountIdAndFamilyIdIsNullAndIsReadFalseAndIsDeletedFalse(me)
-		}
-		unread.forEach { it.isRead = true }
-		notificationRepository.saveAll(unread)
+		notificationRepository.update(
+			UpdateSpecification.update<Notification> { _, update, _ ->
+				update.set("isRead", true)
+				update.set("updatedAt", LocalDateTime.now())
+			}.where(where),
+		)
 	}
 
 	fun deleteNotification(accountId: String, notificationId: UUID) {
@@ -80,6 +69,23 @@ class NotificationInboxService(
 	private fun findMine(me: UUID, notificationId: UUID): Notification =
 		notificationRepository.findByNotificationIdAndAccountIdAndIsDeletedFalse(notificationId, me)
 			?: throw IeumException(NotificationErrorCode.NOTIFICATION_NOT_FOUND)
+
+	private fun inTab(me: UUID, tab: NotificationTab, familyId: UUID?): PredicateSpecification<Notification> {
+		val mine = PredicateSpecification<Notification> { root, cb ->
+			cb.and(cb.equal(root.get<UUID>("accountId"), me), cb.isFalse(root.get("isDeleted")))
+		}
+
+		return when (tab) {
+			NotificationTab.ALL -> mine
+			NotificationTab.FAMILY -> {
+				val checked = checkFamily(me, familyId)
+				mine.and { root, cb -> cb.equal(root.get<UUID>("familyId"), checked) }
+			}
+			NotificationTab.PERSONAL -> mine.and { root, cb -> cb.isNull(root.get<UUID>("familyId")) }
+		}
+	}
+
+	private fun unread() = PredicateSpecification<Notification> { root, cb -> cb.isFalse(root.get("isRead")) }
 
 	private fun checkFamily(me: UUID, familyId: UUID?): UUID {
 		if (familyId == null) {

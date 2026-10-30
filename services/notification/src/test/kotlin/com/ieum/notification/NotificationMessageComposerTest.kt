@@ -18,8 +18,10 @@ import com.ieum.notification.service.NotificationMessage
 import com.ieum.notification.service.NotificationMessageComposer
 import org.junit.jupiter.api.Test
 import java.time.LocalDateTime
+import java.util.Locale
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class NotificationMessageComposerTest {
 
@@ -102,5 +104,24 @@ class NotificationMessageComposerTest {
 
 		assertEquals(NotificationMessage("엄마님이 할 일을 마쳤어요", "가".repeat(50) + "…"), compose(TODO_COMPLETED, data(long)))
 		assertEquals(NotificationMessage("엄마님이 할 일을 마쳤어요", "가".repeat(50)), compose(TODO_COMPLETED, data("가".repeat(50))))
+	}
+
+	@Test
+	fun `금액은 서버 언어 설정과 상관없이 쉼표로 쓴다`() {
+		val original = Locale.getDefault()
+		Locale.setDefault(Locale.GERMANY)
+		try {
+			assertEquals(NotificationMessage("이번 달 예산을 넘었어요", "30,000원 초과"), compose(BUDGET_EXCEEDED, data(amount = 30000)))
+		} finally {
+			Locale.setDefault(original)
+		}
+	}
+
+	@Test
+	fun `문구에 필요한 제목이나 금액이 없으면 저장하지 않고 실패한다`() {
+		assertFailsWith<IllegalArgumentException> { compose(TODO_COMPLETED, data()) }
+		assertFailsWith<IllegalArgumentException> { compose(SCHEDULE_UPDATED, data(at = evening)) }
+		assertFailsWith<IllegalArgumentException> { compose(EXPENSE_PAYER_ASSIGNED, data("장보기")) }
+		assertFailsWith<IllegalArgumentException> { compose(BUDGET_EXCEEDED, data()) }
 	}
 }

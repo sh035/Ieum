@@ -11,5 +11,5 @@ class PageResponse<T>(
 	val size: Int,
 ) : BaseResponse(status) {
 
-	val totalPage: Int = ((totalCount + size - 1) / size).toInt()
+	val totalPage: Int = if (size == 0) 0 else ((totalCount + size - 1) / size).toInt()
 }
