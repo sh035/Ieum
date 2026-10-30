@@ -87,6 +87,10 @@ class NotificationMessageComposerTest {
 			compose(EXPENSE_PAYER_ASSIGNED, data("장보기", amount = 12000)),
 		)
 		assertEquals(NotificationMessage("이번 달 예산을 넘었어요", "30,000원 초과"), compose(BUDGET_EXCEEDED, data(amount = 30000)))
+		assertEquals(
+			NotificationMessage("10월 예산을 넘었어요", "30,000원 초과"),
+			compose(BUDGET_EXCEEDED, data(amount = 30000, at = LocalDateTime.of(2026, 10, 1, 0, 0))),
+		)
 	}
 
 	@Test

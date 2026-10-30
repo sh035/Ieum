@@ -7,17 +7,17 @@ import java.util.UUID
 data class NotificationEventData(
 	val recipientAccountIds: List<UUID>,
 	// 알림함 가족 탭 기준이다. 가족과 무관한 알림이면 null 이다.
-	val familyId: UUID?,
-	val targetType: NotificationTargetType?,
-	val targetId: UUID?,
+	val familyId: UUID? = null,
+	val targetType: NotificationTargetType? = null,
+	val targetId: UUID? = null,
 	// 문구에 넣을 닉네임을 조회할 계정이다.
-	val actorAccountId: UUID?,
-	val subject: String?,
+	val actorAccountId: UUID? = null,
+	val subject: String? = null,
 	// 날짜만 있으면 자정으로 채운다.
-	val at: LocalDateTime?,
-	val amount: Int?,
+	val at: LocalDateTime? = null,
+	val amount: Int? = null,
 	// FAMILY_ROLE_CHANGED 의 새 역할이다.
-	val role: String?,
+	val role: String? = null,
 	// 스케줄러처럼 같은 알림을 여러 번 발행할 수 있으면 채운다. 없으면 eventId 로 중복을 막는다.
-	val dedupKey: String?,
+	val dedupKey: String? = null,
 )

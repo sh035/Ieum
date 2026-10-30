@@ -1,5 +1,9 @@
 package com.ieum.expense.service
 
+import com.ieum.events.NotificationEventData
+import com.ieum.events.NotificationEventPublisher
+import com.ieum.events.NotificationEventType
+import com.ieum.events.NotificationTargetType
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.expense.controller.dto.request.CreateExpenseRequest
 import com.ieum.expense.controller.dto.request.UpdateExpenseRequest
@@ -24,15 +28,19 @@ class ExpenseService(
 	private val expenseRepository: ExpenseRepository,
 	private val budgetService: BudgetService,
 	private val familyClient: FamilyClient,
+	private val notificationEventPublisher: NotificationEventPublisher,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
 
+	@Transactional
 	fun createExpense(accountId: String, request: CreateExpenseRequest): ExpenseResponse {
 		val me = UUID.fromString(accountId)
 		if (!familyClient.isMember(request.familyId, me)) {
 			throw IeumException(ExpenseErrorCode.FAMILY_NOT_FOUND)
 		}
+		val month = YearMonth.from(request.spentDate)
+		val before = familyTotal(request.familyId, month)
 
 		val expense = expenseRepository.save(
 			Expense(
@@ -48,6 +56,8 @@ class ExpenseService(
 			),
 		)
 
+		notifyPayer(expense, me)
+		checkFamilyBudget(expense, month, before, me)
 		log.debug("Expense created. expenseId={}, accountId={}", expense.expenseId, accountId)
 
 		return expense.toResponse()
@@ -87,12 +97,16 @@ class ExpenseService(
 	fun getExpense(accountId: String, expenseId: UUID): ExpenseResponse =
 		findAccessibleExpense(UUID.fromString(accountId), expenseId).toResponse()
 
+	@Transactional
 	fun updateExpense(accountId: String, expenseId: UUID, request: UpdateExpenseRequest): ExpenseResponse {
 		val me = UUID.fromString(accountId)
 		val expense = findAccessibleExpense(me, expenseId)
+		val month = YearMonth.from(request.spentDate)
+		val before = familyTotal(expense.familyId, month)
 
 		// 결제한 사람을 바꿀 때만 확인한다. 기존 결제자가 가족을 나가도 다른 필드는 고칠 수 있어야 한다.
-		if (request.payerAccountId != expense.payerAccountId) {
+		val payerChanged = request.payerAccountId != expense.payerAccountId
+		if (payerChanged) {
 			expense.payerAccountId = resolvePayer(expense.familyId, expense.visibility, me, request.payerAccountId)
 		}
 		expense.title = request.title.trim()
@@ -101,7 +115,12 @@ class ExpenseService(
 		expense.category = request.category
 		expense.spentDate = request.spentDate
 
-		return expenseRepository.save(expense).toResponse()
+		val saved = expenseRepository.save(expense)
+		if (payerChanged) {
+			notifyPayer(saved, me)
+		}
+		checkFamilyBudget(saved, month, before, me)
+		return saved.toResponse()
 	}
 
 	fun deleteExpense(accountId: String, expenseId: UUID) {
@@ -136,6 +155,57 @@ class ExpenseService(
 			throw IeumException(ExpenseErrorCode.INVALID_PAYER)
 		}
 		return payerAccountId
+	}
+
+	// 결제자가 행동한 본인이면 발행기가 거른다.
+	private fun notifyPayer(expense: Expense, me: UUID) {
+		notificationEventPublisher.publish(
+			NotificationEventType.EXPENSE_PAYER_ASSIGNED,
+			NotificationEventData(
+				recipientAccountIds = listOf(expense.payerAccountId),
+				familyId = expense.familyId,
+				targetType = NotificationTargetType.EXPENSE,
+				targetId = expense.expenseId,
+				actorAccountId = me,
+				subject = expense.title,
+				amount = expense.amount,
+			),
+		)
+	}
+
+	private fun familyTotal(familyId: UUID, month: YearMonth): Long =
+		expenseRepository
+			.findAllByFamilyIdAndVisibilityAndSpentDateBetweenAndIsDeletedFalse(familyId, Visibility.FAMILY, month.atDay(1), month.atEndOfMonth())
+			.sumOf { it.amount.toLong() }
+
+	// 가족 지출이 그 달 가족 예산을 넘는 순간에만 OWNER / MANAGER 에게 알린다. 같은 달은 dedup 키로 한 번만 간다.
+	// 두 지출이 동시에 들어와 서로의 저장을 못 본 채 둘 다 예산 이하로 판단하면 알림이 빠진다. 드물어서 받아들이고, 문제가 되면 가족 단위 잠금으로 바꾼다.
+	private fun checkFamilyBudget(expense: Expense, month: YearMonth, before: Long, me: UUID) {
+		if (expense.visibility != Visibility.FAMILY) return
+		val budget = budgetService.findEffectiveAmount(expense.familyId, null, month) ?: return
+		// 같은 트랜잭션의 조회라 방금 저장한 지출까지 flush 되어 합계에 들어간다.
+		val after = familyTotal(expense.familyId, month)
+		if (before > budget || after <= budget) return
+
+		// 알림 때문에 지출 저장이 취소되면 안 되므로 조회 실패는 알림만 포기한다.
+		val managers = try {
+			familyClient.getFamily(expense.familyId)?.members?.filterValues(BudgetService::canManageFamilyBudget)?.keys.orEmpty()
+		} catch (e: IeumException) {
+			log.warn("Budget notification skipped. familyId={}, message={}", expense.familyId, e.message)
+			return
+		}
+		notificationEventPublisher.publish(
+			NotificationEventType.BUDGET_EXCEEDED,
+			NotificationEventData(
+				recipientAccountIds = managers.toList(),
+				familyId = expense.familyId,
+				targetType = NotificationTargetType.BUDGET,
+				actorAccountId = me,
+				amount = (after - budget).toInt(),
+				at = month.atDay(1).atStartOfDay(),
+				dedupKey = "BUDGET_EXCEEDED:${expense.familyId}:FAMILY:$month",
+			),
+		)
 	}
 
 	// 차트에서 빠진 키를 따로 다루지 않도록 모든 카테고리를 0 원부터 채운다.

@@ -13,6 +13,12 @@ spring:
     properties:
       hibernate:
         default_schema: planner
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    producer:
+      properties:
+        # Kafka 장애가 API 지연으로 번지지 않게 발행 대기를 2초로 끊는다.
+        max.block.ms: 2000
   grpc:
     client:
       channel:
