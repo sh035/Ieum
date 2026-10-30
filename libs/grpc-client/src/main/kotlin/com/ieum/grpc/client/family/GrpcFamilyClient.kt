@@ -1,79 +1,68 @@
 package com.ieum.grpc.client.family
 
 import com.ieum.grpc.client.GrpcClientErrorCode
+import com.ieum.grpc.client.GrpcClientSupport
 import com.ieum.proto.family.v1.FamilyInternalServiceGrpc
+import com.ieum.proto.family.v1.FamilyInternalServiceGrpc.FamilyInternalServiceBlockingStub
+import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRolesRequest
-import com.ieum.web.exception.IeumException
-import io.grpc.Status
-import io.grpc.StatusRuntimeException
 import org.springframework.grpc.client.GrpcChannelFactory
 import org.springframework.stereotype.Component
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 import com.ieum.proto.family.v1.FamilyRole as ProtoFamilyRole
 
 // 주소는 spring.grpc.client.channel.family.target 으로 정한다.
 @Component
 class GrpcFamilyClient(
 	channels: GrpcChannelFactory,
-) : FamilyClient {
+) : GrpcClientSupport<FamilyInternalServiceBlockingStub>(
+	FamilyInternalServiceGrpc.newBlockingStub(channels.createChannel("family")),
+	GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE,
+),
+	FamilyClient {
 
-	private val stub = FamilyInternalServiceGrpc.newBlockingStub(channels.createChannel("family"))
-
-	override fun getRole(familyId: UUID, accountId: UUID): FamilyRole? {
-		val response = try {
-			call {
-				it.getMemberRole(
-					GetMemberRoleRequest.newBuilder()
-						.setFamilyId(familyId.toString())
-						.setAccountId(accountId.toString())
-						.build(),
-				)
-			}
-		} catch (e: StatusRuntimeException) {
-			if (e.status.code == Status.Code.NOT_FOUND) {
-				return null
-			}
-			throw IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE)
-		}
-
-		return response.role.toDomain()
-	}
+	override fun getRole(familyId: UUID, accountId: UUID): FamilyRole? =
+		callOrNull {
+			it.getMemberRole(
+				GetMemberRoleRequest.newBuilder()
+					.setFamilyId(familyId.toString())
+					.setAccountId(accountId.toString())
+					.build(),
+			)
+		}?.role?.toDomain()
 
 	override fun getRoles(familyId: UUID, accountIds: Collection<UUID>): Map<UUID, FamilyRole> {
 		if (accountIds.isEmpty()) {
 			return emptyMap()
 		}
 
-		val response = try {
-			call {
-				it.getMemberRoles(
-					GetMemberRolesRequest.newBuilder()
-						.setFamilyId(familyId.toString())
-						.addAllAccountIds(accountIds.map(UUID::toString))
-						.build(),
-				)
-			}
-		} catch (e: StatusRuntimeException) {
-			throw IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE)
+		val response = call {
+			it.getMemberRoles(
+				GetMemberRolesRequest.newBuilder()
+					.setFamilyId(familyId.toString())
+					.addAllAccountIds(accountIds.map(UUID::toString))
+					.build(),
+			)
 		}
 
-		return response.rolesMap.entries.associate { (accountId, role) -> UUID.fromString(accountId) to role.toDomain() }
+		return response.rolesMap.entries.associate { (accountId, role) -> accountId.toUuid() to role.toDomain() }
 	}
 
-	// deadline 은 호출 시점 기준이라 매번 새로 건다.
-	private fun <T> call(rpc: (FamilyInternalServiceGrpc.FamilyInternalServiceBlockingStub) -> T): T =
-		rpc(stub.withDeadlineAfter(DEADLINE_SECONDS, TimeUnit.SECONDS))
+	override fun getFamily(familyId: UUID): FamilyInfo? {
+		val response = callOrNull { it.getFamily(GetFamilyRequest.newBuilder().setFamilyId(familyId.toString()).build()) }
+			?: return null
+
+		return FamilyInfo(
+			name = response.name,
+			members = response.membersList.associate { it.accountId.toUuid() to it.role.toDomain() },
+		)
+	}
 
 	private fun ProtoFamilyRole.toDomain() = when (this) {
 		ProtoFamilyRole.FAMILY_ROLE_OWNER -> FamilyRole.OWNER
 		ProtoFamilyRole.FAMILY_ROLE_MANAGER -> FamilyRole.MANAGER
 		ProtoFamilyRole.FAMILY_ROLE_MEMBER -> FamilyRole.MEMBER
-		else -> throw IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE)
-	}
-
-	companion object {
-		private const val DEADLINE_SECONDS = 3L
+		else -> unavailable()
 	}
 }

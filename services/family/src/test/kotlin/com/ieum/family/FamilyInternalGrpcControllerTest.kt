@@ -7,6 +7,7 @@ import com.ieum.family.repository.FamilyInvitationRepository
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
 import com.ieum.proto.family.v1.FamilyInternalServiceGrpc
+import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRolesRequest
 import io.grpc.Status
@@ -123,5 +124,46 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 			roles,
 		)
 		assertEquals(emptyMap(), getRoles(familyId))
+	}
+
+	private fun getFamily(familyId: Any) =
+		stub.getFamily(GetFamilyRequest.newBuilder().setFamilyId(familyId.toString()).build())
+
+	@Test
+	fun `가족 이름과 현재 구성원을 돌려준다`() {
+		val familyId = createFamily()
+		val manager = familyMemberRepository.save(
+			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MANAGER),
+		)
+
+		val family = getFamily(familyId)
+
+		assertEquals("우리집", family.name)
+		assertEquals(
+			mapOf(ownerId.toString() to ProtoFamilyRole.FAMILY_ROLE_OWNER, manager.accountId.toString() to ProtoFamilyRole.FAMILY_ROLE_MANAGER),
+			family.membersList.associate { it.accountId to it.role },
+		)
+	}
+
+	@Test
+	fun `내보낸 구성원은 가족 정보에서 빠진다`() {
+		val familyId = createFamily()
+		val left = familyMemberRepository.save(
+			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER),
+		)
+		left.delete()
+		familyMemberRepository.save(left)
+
+		assertEquals(listOf(ownerId.toString()), getFamily(familyId).membersList.map { it.accountId })
+	}
+
+	@Test
+	fun `없거나 삭제된 가족은 NOT_FOUND`() {
+		val deleted = familyRepository.save(Family(name = "옛집")).apply { delete() }
+		familyRepository.save(deleted)
+
+		assertStatus(Status.Code.NOT_FOUND) { getFamily(UUID.randomUUID()) }
+		assertStatus(Status.Code.NOT_FOUND) { getFamily(requireNotNull(deleted.familyId)) }
+		assertStatus(Status.Code.INVALID_ARGUMENT) { getFamily("not-a-uuid") }
 	}
 }

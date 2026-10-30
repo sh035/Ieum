@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package ieum.account.v1;
+
+option java_multiple_files = true;
+option java_package = "com.ieum.proto.account.v1";
+
+// 서비스 간 호출 전용. Gateway 에 노출하지 않는다.
+service AccountInternalService {
+  // 없거나 탈퇴한 계정은 응답에서 빠진다.
+  rpc GetNicknames(GetNicknamesRequest) returns (GetNicknamesResponse);
+}
+
+message GetNicknamesRequest {
+  repeated string account_ids = 1;
+}
+
+message GetNicknamesResponse {
+  // key 는 account_id
+  map<string, string> nicknames = 1;
+}

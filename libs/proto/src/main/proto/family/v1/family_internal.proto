@@ -12,6 +12,9 @@ service FamilyInternalService {
 
   // 여러 계정을 한 번에 확인한다. 구성원인 계정만 담아 응답한다.
   rpc GetMemberRoles(GetMemberRolesRequest) returns (GetMemberRolesResponse);
+
+  // 가족 이름과 현재 구성원. 없거나 삭제된 가족이면 NOT_FOUND 로 응답한다.
+  rpc GetFamily(GetFamilyRequest) returns (GetFamilyResponse);
 }
 
 message GetMemberRoleRequest {
@@ -31,6 +34,20 @@ message GetMemberRolesRequest {
 message GetMemberRolesResponse {
   // key 는 account_id
   map<string, FamilyRole> roles = 1;
+}
+
+message GetFamilyRequest {
+  string family_id = 1;
+}
+
+message GetFamilyResponse {
+  string name = 1;
+  repeated FamilyMember members = 2;
+}
+
+message FamilyMember {
+  string account_id = 1;
+  FamilyRole role = 2;
 }
 
 enum FamilyRole {

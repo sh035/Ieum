@@ -1,12 +1,15 @@
 package com.ieum.family.service
 
 import com.ieum.family.controller.dto.response.CreateFamilyResponse
+import com.ieum.family.controller.dto.response.FamilyInfoResponse
 import com.ieum.family.controller.dto.response.FamilyResponse
 import com.ieum.family.domain.entity.Family
 import com.ieum.family.domain.entity.FamilyMember
 import com.ieum.family.domain.enums.FamilyRole
+import com.ieum.family.exception.FamilyErrorCode
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
+import com.ieum.web.exception.IeumException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -47,5 +50,15 @@ class FamilyService(
 		return members.mapNotNull { member ->
 			families[member.familyId]?.let { FamilyResponse(familyId = member.familyId, name = it.name, role = member.role) }
 		}
+	}
+
+	// 서비스 간 호출용이라 요청자 권한은 보지 않는다.
+	@Transactional(readOnly = true)
+	fun getFamilyInfo(familyId: UUID): FamilyInfoResponse {
+		val family = familyRepository.findByFamilyIdAndIsDeletedFalse(familyId)
+			?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
+		val members = familyMemberRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId)
+
+		return FamilyInfoResponse(name = family.name, members = members.associate { it.accountId to it.role })
 	}
 }

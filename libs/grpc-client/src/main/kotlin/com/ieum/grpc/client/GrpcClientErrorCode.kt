@@ -8,4 +8,5 @@ enum class GrpcClientErrorCode(
 	override val message: String,
 ) : ErrorCode {
 	FAMILY_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Family service unavailable."),
+	ACCOUNT_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Account service unavailable."),
 }

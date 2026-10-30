@@ -11,4 +11,7 @@ interface FamilyClient {
 
 	// 구성원인 계정만 담는다. 여러 계정을 확인할 때 한 번에 묻는다.
 	fun getRoles(familyId: UUID, accountIds: Collection<UUID>): Map<UUID, FamilyRole>
+
+	// 없거나 삭제된 가족이면 null 이다.
+	fun getFamily(familyId: UUID): FamilyInfo?
 }
