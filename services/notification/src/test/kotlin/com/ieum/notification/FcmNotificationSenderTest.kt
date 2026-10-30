@@ -11,6 +11,8 @@ import com.ieum.notification.repository.DeviceTokenRepository
 import com.ieum.notification.repository.NotificationRepository
 import com.ieum.notification.service.delivery.FcmClient
 import com.ieum.notification.service.delivery.FcmNotificationSender
+import com.ieum.notification.service.delivery.NotificationSender
+import com.ieum.notification.service.delivery.SseNotificationSender
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.verify
@@ -18,6 +20,7 @@ import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.kafka.core.ProducerFactory
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -27,6 +30,8 @@ class FcmNotificationSenderTest @Autowired constructor(
 	private val fcmNotificationSender: FcmNotificationSender,
 	private val notificationRepository: NotificationRepository,
 	private val deviceTokenRepository: DeviceTokenRepository,
+	private val senders: List<NotificationSender>,
+	private val producerFactory: ProducerFactory<String, String>,
 ) : PostgresKafkaTestSupport() {
 
 	@MockitoBean
@@ -95,5 +100,15 @@ class FcmNotificationSenderTest @Autowired constructor(
 		fcmNotificationSender.send(notification())
 
 		verifyNoInteractions(fcmClient)
+	}
+
+	@Test
+	fun `앱을 켜 둔 사용자가 FCM 왕복을 기다리지 않게 SSE 를 먼저 보낸다`() {
+		assertEquals(listOf(SseNotificationSender::class, FcmNotificationSender::class), senders.map { it::class })
+	}
+
+	@Test
+	fun `Kafka 가 죽어 있어도 전달 발행은 2초만 기다린다`() {
+		assertEquals("2000", producerFactory.configurationProperties["max.block.ms"].toString())
 	}
 }

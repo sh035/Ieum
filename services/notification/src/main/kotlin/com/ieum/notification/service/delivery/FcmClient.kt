@@ -6,6 +6,7 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.MessagingErrorCode
 import com.google.firebase.messaging.MulticastMessage
+import com.google.firebase.messaging.SendResponse
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.stereotype.Component
@@ -21,8 +22,13 @@ class FcmClient(
 
 	// 서비스 계정 JSON 을 base64 로 받는다 (JWT 키와 같은 방식).
 	private val messaging: FirebaseMessaging = Base64.getDecoder().decode(credentials).inputStream().use { json ->
-		val options = FirebaseOptions.builder().setCredentials(GoogleCredentials.fromStream(json)).build()
-		FirebaseMessaging.getInstance(FirebaseApp.initializeApp(options))
+		// 전송은 Kafka 리스너 스레드에서 돌아서, Firebase 가 느릴 때 다른 알림까지 묶이지 않게 짧게 끊는다.
+		val options = FirebaseOptions.builder()
+			.setCredentials(GoogleCredentials.fromStream(json))
+			.setConnectTimeout(CONNECT_TIMEOUT_MILLIS)
+			.setReadTimeout(READ_TIMEOUT_MILLIS)
+			.build()
+		FirebaseMessaging.getInstance(FirebaseApp.getApps().firstOrNull() ?: FirebaseApp.initializeApp(options))
 	}
 
 	// 다시 보내도 소용없는 토큰 (앱 삭제 / 잘못된 토큰) 을 돌려준다.
@@ -34,16 +40,21 @@ class FcmClient(
 			.putAllData(data)
 			.build()
 
-		return messaging.sendEachForMulticast(message).responses
-			.zip(ordered)
-			.filter { (response, _) -> response.exception?.messagingErrorCode in INVALID_TOKEN_CODES }
-			.map { (_, token) -> token }
-			.toSet()
+		return invalidTokens(ordered, messaging.sendEachForMulticast(message).responses)
 	}
 
 	companion object {
 		// 키가 비어 있는 로컬 / 테스트에서는 FCM 빈을 만들지 않는다.
 		const val ENABLED = "'\${firebase.credentials:}' != ''"
+		private const val CONNECT_TIMEOUT_MILLIS = 3_000
+		private const val READ_TIMEOUT_MILLIS = 5_000
 		private val INVALID_TOKEN_CODES = setOf(MessagingErrorCode.UNREGISTERED, MessagingErrorCode.INVALID_ARGUMENT)
+
+		// 응답은 보낸 토큰 순서대로 온다.
+		fun invalidTokens(tokens: List<String>, responses: List<SendResponse>): Set<String> =
+			responses.zip(tokens)
+				.filter { (response, _) -> !response.isSuccessful && response.exception?.messagingErrorCode in INVALID_TOKEN_CODES }
+				.map { (_, token) -> token }
+				.toSet()
 	}
 }
