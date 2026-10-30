@@ -1,8 +1,10 @@
 package com.ieum.notification.service.delivery
 
 import com.ieum.events.Topics
+import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
+import tools.jackson.core.JacksonException
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
 
@@ -13,14 +15,22 @@ class NotificationDeliveryReceiver(
 	private val sseEmitterRegistry: SseEmitterRegistry,
 ) {
 
+	private val log = LoggerFactory.getLogger(javaClass)
+
 	@KafkaListener(
 		id = "sse-delivery",
 		topics = [Topics.NOTIFICATION_DELIVERY],
 		groupId = "notification-sse-#{T(java.util.UUID).randomUUID()}",
-		properties = ["auto.offset.reset=latest"],
+		properties = ["auto.offset.reset=\${notification.delivery.auto-offset-reset}"],
 	)
 	fun receive(message: String) {
-		val delivery = objectMapper.readValue<NotificationDelivery>(message)
+		// 실시간 표시용 복사본이라 다시 처리할 가치가 없다. DLT 로 보내면 Pod 수만큼 쌓인다.
+		val delivery = try {
+			objectMapper.readValue<NotificationDelivery>(message)
+		} catch (e: JacksonException) {
+			log.warn("Broken notification delivery dropped. message={}", e.originalMessage)
+			return
+		}
 		sseEmitterRegistry.send(delivery.accountId, EVENT_NAME, delivery.notification)
 	}
 

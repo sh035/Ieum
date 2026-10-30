@@ -1,6 +1,8 @@
 package com.ieum.notification.service.delivery
 
 import org.slf4j.LoggerFactory
+import org.springframework.context.event.ContextClosedEvent
+import org.springframework.context.event.EventListener
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
@@ -24,6 +26,12 @@ class SseEmitterRegistry {
 		// 첫 바이트를 바로 보내야 프록시 / 클라이언트가 연결이 열린 걸 안다.
 		emitter.send(SseEmitter.event().comment("connected"))
 		return emitter
+	}
+
+	// 응답 대기 중인 연결이 graceful shutdown 을 붙잡지 않게 먼저 닫는다. 앱은 다른 Pod 로 다시 붙는다.
+	@EventListener(ContextClosedEvent::class)
+	fun completeAll() {
+		emitters.values.flatten().forEach { it.complete() }
 	}
 
 	fun send(accountId: UUID, name: String, data: Any) {

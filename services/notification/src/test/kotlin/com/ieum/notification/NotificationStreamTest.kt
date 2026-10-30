@@ -9,6 +9,9 @@ import com.ieum.grpc.client.account.AccountClient
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.notification.repository.NotificationRepository
 import com.ieum.notification.service.delivery.SseEmitterRegistry
+import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.consumer.KafkaConsumer
+import org.apache.kafka.common.serialization.StringDeserializer
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.`when`
@@ -24,12 +27,15 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.MvcResult
 import org.springframework.test.web.servlet.get
 import tools.jackson.databind.ObjectMapper
+import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-@SpringBootTest
+// 구독이 붙는 순간과 발행이 겹쳐 메시지를 건너뛰지 않게 테스트에서는 처음부터 읽는다.
+@SpringBootTest(properties = ["notification.delivery.auto-offset-reset=earliest"])
 @AutoConfigureMockMvc
 class NotificationStreamTest @Autowired constructor(
 	private val mockMvc: MockMvc,
@@ -54,7 +60,6 @@ class NotificationStreamTest @Autowired constructor(
 	fun setUp() {
 		notificationRepository.deleteAllInBatch()
 		`when`(accountClient.getNicknames(setOf(mom))).thenReturn(mapOf(mom to "엄마"))
-		// 전달 토픽은 최신 메시지부터 읽으므로 구독이 붙은 뒤에 보내야 한다.
 		ContainerTestUtils.waitForAssignment(requireNotNull(listenerRegistry.getListenerContainer("sse-delivery")), 1)
 	}
 
@@ -115,4 +120,49 @@ class NotificationStreamTest @Autowired constructor(
 		sseEmitterRegistry.send(accountId, "notification", "hello")
 		sseEmitterRegistry.send(accountId, "notification", "hello")
 	}
+
+	@Test
+	fun `서버가 내려가면 열린 연결을 먼저 닫는다`() {
+		val emitter = sseEmitterRegistry.connect(UUID.randomUUID())
+
+		sseEmitterRegistry.completeAll()
+
+		assertFailsWith<IllegalStateException> { emitter.send("after shutdown") }
+	}
+
+	@Test
+	fun `깨진 전달 메시지는 DLT 로 보내지 않고 버린다`() {
+		val broken = "{broken delivery ${UUID.randomUUID()}"
+		kafkaTemplate.send(Topics.NOTIFICATION_DELIVERY, broken).get()
+		val phone = connect(dad)
+		val delivery = """{"accountId":"$dad","notification":{"notificationId":"${UUID.randomUUID()}","familyId":null,""" +
+			""""type":"TODO_COMPLETED","title":"다음 알림","body":"분리수거하기","targetType":null,"targetId":null,""" +
+			""""isRead":false,"createdAt":"2026-10-30T09:00:00"}}"""
+		kafkaTemplate.send(Topics.NOTIFICATION_DELIVERY, delivery).get()
+
+		awaitBody(phone, "다음 알림")
+		assertFalse(readAllDlt().any { it.contains(broken) })
+	}
+
+	// DLT 를 처음부터 끝까지 읽는다. 빈 poll 이 두 번 이어지면 끝으로 본다.
+	private fun readAllDlt(): List<String> =
+		KafkaConsumer<String, String>(
+			mapOf(
+				ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to kafka.bootstrapServers,
+				ConsumerConfig.GROUP_ID_CONFIG to "dlt-${UUID.randomUUID()}",
+				ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
+			),
+			StringDeserializer(),
+			StringDeserializer(),
+		).use { consumer ->
+			consumer.subscribe(listOf(Topics.NOTIFICATION_DLT))
+			val values = mutableListOf<String>()
+			var emptyPolls = 0
+			while (emptyPolls < 2) {
+				val records = consumer.poll(Duration.ofSeconds(2))
+				if (records.isEmpty) emptyPolls++ else emptyPolls = 0
+				records.forEach { values += it.value() }
+			}
+			values
+		}
 }

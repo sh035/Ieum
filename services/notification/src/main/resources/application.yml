@@ -36,5 +36,9 @@ server:
 jwt:
   public-key: ${JWT_PUBLIC_KEY}
 
+notification:
+  delivery:
+    auto-offset-reset: latest
+
 firebase:
   credentials: ${FIREBASE_CREDENTIALS:}
