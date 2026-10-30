@@ -88,7 +88,14 @@ class PlannerNotificationEventTest @Autowired constructor(
 		"""{"familyId":"$familyId","visibility":"FAMILY","title":"$title","assigneeAccountId":"$assignee",""" +
 			""""dueDate":"2026-11-01","dueTime":"18:00:00"}"""
 
-	private fun todoEvent(type: NotificationEventType, recipient: UUID, todoId: UUID, actor: UUID, title: String = "분리수거하기") =
+	private fun todoEvent(
+		type: NotificationEventType,
+		recipient: UUID,
+		todoId: UUID,
+		actor: UUID,
+		title: String = "분리수거하기",
+		dedupKey: String? = null,
+	) =
 		NotificationEvent(
 			type,
 			NotificationEventData(
@@ -99,6 +106,7 @@ class PlannerNotificationEventTest @Autowired constructor(
 				actorAccountId = actor,
 				subject = title,
 				at = LocalDateTime.of(2026, 11, 1, 18, 0),
+				dedupKey = dedupKey,
 			),
 		)
 
@@ -141,7 +149,23 @@ class PlannerNotificationEventTest @Autowired constructor(
 		send("POST", "/api/v1/todo/$todoId/complete", accountId = member)
 		send("POST", "/api/v1/todo/$todoId/complete", accountId = member)
 
-		assertEquals(listOf(todoEvent(NotificationEventType.TODO_COMPLETED, me, todoId, member)), published())
+		assertEquals(
+			listOf(todoEvent(NotificationEventType.TODO_COMPLETED, me, todoId, member, dedupKey = "TODO_COMPLETED:$todoId")),
+			published(),
+		)
+	}
+
+	@Test
+	fun `완료를 취소했다가 다시 완료해도 같은 중복 방지 키라 알림함에는 한 번만 남는다`() {
+		val todoId = id(send("POST", "/api/v1/todo", body = familyTodo(member)), "todoId")
+		events.clear()
+
+		send("POST", "/api/v1/todo/$todoId/complete", accountId = member)
+		send("DELETE", "/api/v1/todo/$todoId/complete", accountId = member)
+		send("POST", "/api/v1/todo/$todoId/complete", accountId = member)
+
+		val completed = todoEvent(NotificationEventType.TODO_COMPLETED, me, todoId, member, dedupKey = "TODO_COMPLETED:$todoId")
+		assertEquals(listOf(completed, completed), published())
 	}
 
 	private fun familySchedule(attendees: List<UUID>, isAllFamily: Boolean = false, visibility: String = "FAMILY") =

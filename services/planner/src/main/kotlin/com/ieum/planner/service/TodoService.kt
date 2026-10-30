@@ -181,8 +181,9 @@ class TodoService(
 		todos.forEach { it.isCompleted = isCompleted }
 		todoRepository.saveAll(todos)
 
+		// 완료를 껐다 켜도 만든 사람은 한 번만 받게 할 일마다 같은 키를 쓴다.
 		if (newlyCompleted) {
-			notify(NotificationEventType.TODO_COMPLETED, todo, recipient = todo.creatorAccountId, actor = me)
+			notify(NotificationEventType.TODO_COMPLETED, todo, recipient = todo.creatorAccountId, actor = me, dedupKey = "TODO_COMPLETED:$todoId")
 		}
 	}
 
@@ -240,7 +241,7 @@ class TodoService(
 	}
 
 	// 받는 사람이 행동한 본인이면 발행기가 거른다.
-	private fun notify(type: NotificationEventType, todo: Todo, recipient: UUID, actor: UUID) {
+	private fun notify(type: NotificationEventType, todo: Todo, recipient: UUID, actor: UUID, dedupKey: String? = null) {
 		notificationEventPublisher.publish(
 			type,
 			NotificationEventData(
@@ -251,6 +252,7 @@ class TodoService(
 				actorAccountId = actor,
 				subject = todo.title,
 				at = todo.dueDate?.atTime(todo.dueTime ?: LocalTime.MIDNIGHT),
+				dedupKey = dedupKey,
 			),
 		)
 	}
