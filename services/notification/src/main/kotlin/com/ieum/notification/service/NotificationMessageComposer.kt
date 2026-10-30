@@ -14,7 +14,7 @@ class NotificationMessageComposer {
 
 	fun compose(type: NotificationEventType, data: NotificationEventData, actorNickname: String?, familyName: String?): NotificationMessage {
 		val nickname = actorNickname ?: UNKNOWN
-		val subject = data.subject.orEmpty()
+		val subject = data.subject.orEmpty().shorten()
 
 		return when (type) {
 			NotificationEventType.TODO_ASSIGNED ->
@@ -38,7 +38,10 @@ class NotificationMessageComposer {
 	}
 
 	private fun dated(data: NotificationEventData) =
-		listOfNotNull(data.at?.let { it.format(DATE) }, data.subject).joinToString(" ")
+		listOfNotNull(data.at?.let { it.format(DATE) }, data.subject?.shorten()).joinToString(" ")
+
+	// 할 일 / 일정 제목은 255자까지라 본문 컬럼(200자)과 잠금 화면 한 줄에 맞게 자른다.
+	private fun String.shorten() = if (length > MAX_SUBJECT_LENGTH) take(MAX_SUBJECT_LENGTH) + "…" else this
 
 	// 날짜만 있는 마감은 자정으로 오므로 시각을 빼고 쓴다.
 	private fun dateTime(at: LocalDateTime) =
@@ -49,6 +52,7 @@ class NotificationMessageComposer {
 	companion object {
 		private const val UNKNOWN = "가족"
 		private const val MANAGER = "MANAGER"
+		private const val MAX_SUBJECT_LENGTH = 50
 		private val DATE = DateTimeFormatter.ofPattern("M/d(E)", Locale.KOREAN)
 		private val TIME = DateTimeFormatter.ofPattern("HH:mm")
 	}

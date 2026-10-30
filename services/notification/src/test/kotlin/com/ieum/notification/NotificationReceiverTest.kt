@@ -5,10 +5,12 @@ import com.ieum.events.NotificationEventData
 import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationTargetType
 import com.ieum.events.Topics
+import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.account.AccountClient
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.grpc.client.family.FamilyInfo
 import com.ieum.notification.repository.NotificationRepository
+import com.ieum.web.exception.IeumException
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.StringDeserializer
@@ -57,6 +59,8 @@ class NotificationReceiverTest @Autowired constructor(
 		recipients: List<UUID> = listOf(dad, kid),
 		eventId: UUID = UUID.randomUUID(),
 		dedupKey: String? = null,
+		actor: UUID = mom,
+		subject: String = "분리수거하기",
 	) = IeumEvent(
 		eventId = eventId,
 		eventType = type.name,
@@ -66,8 +70,8 @@ class NotificationReceiverTest @Autowired constructor(
 			familyId = familyId,
 			targetType = NotificationTargetType.TODO,
 			targetId = todoId,
-			actorAccountId = mom,
-			subject = "분리수거하기",
+			actorAccountId = actor,
+			subject = subject,
 			at = LocalDateTime.of(2026, 10, 30, 19, 0),
 			amount = null,
 			role = null,
@@ -148,7 +152,36 @@ class NotificationReceiverTest @Autowired constructor(
 		assertTrue(readDlt().contains(broken))
 	}
 
-	private fun readDlt(): List<String> =
+@Test
+	fun `제목이 컬럼보다 길어도 잘라서 저장한다`() {
+		send(event(recipients = listOf(dad), subject = "가".repeat(255)))
+
+		awaitCount(1)
+		assertEquals("가".repeat(50) + "… · 10/30(금) 19:00", notificationRepository.findAll().single().body)
+	}
+
+	@Test
+	fun `닉네임 조회가 실패해도 가족으로 써서 저장한다`() {
+		`when`(accountClient.getNicknames(setOf(kid))).thenThrow(IeumException(GrpcClientErrorCode.ACCOUNT_SERVICE_UNAVAILABLE))
+
+		send(event(recipients = listOf(dad), actor = kid))
+
+		awaitCount(1)
+		assertEquals("가족님이 할 일을 맡겼어요", notificationRepository.findAll().single().title)
+	}
+
+	@Test
+	fun `모르는 eventType 은 DLT 로 가고 다음 메시지는 처리된다`() {
+		val unknown = objectMapper.writeValueAsString(event(recipients = listOf(kid))).replace("TODO_ASSIGNED", "UNKNOWN_${UUID.randomUUID()}")
+		send(unknown)
+		send(event(recipients = listOf(dad)))
+
+		awaitCount(1)
+		assertEquals(dad, notificationRepository.findAll().single().accountId)
+		assertTrue(readDlt().contains(unknown))
+	}
+
+		private fun readDlt(): List<String> =
 		KafkaConsumer<String, String>(
 			mapOf(
 				ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to kafka.bootstrapServers,

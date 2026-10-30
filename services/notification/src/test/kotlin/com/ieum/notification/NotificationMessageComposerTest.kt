@@ -95,4 +95,12 @@ class NotificationMessageComposerTest {
 			compose(FAMILY_SCHEDULE_CREATED, data("할머니 생신", evening), familyName = null),
 		)
 	}
+
+	@Test
+	fun `긴 제목은 50자로 자르고 말줄임표를 붙인다`() {
+		val long = "가".repeat(51)
+
+		assertEquals(NotificationMessage("엄마님이 할 일을 마쳤어요", "가".repeat(50) + "…"), compose(TODO_COMPLETED, data(long)))
+		assertEquals(NotificationMessage("엄마님이 할 일을 마쳤어요", "가".repeat(50)), compose(TODO_COMPLETED, data("가".repeat(50))))
+	}
 }
