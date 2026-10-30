@@ -1,5 +1,9 @@
 package com.ieum.planner.service
 
+import com.ieum.events.NotificationEventData
+import com.ieum.events.NotificationEventPublisher
+import com.ieum.events.NotificationEventType
+import com.ieum.events.NotificationTargetType
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.planner.controller.dto.request.CreateScheduleRequest
 import com.ieum.planner.controller.dto.request.UpdateScheduleRequest
@@ -23,6 +27,7 @@ class ScheduleService(
 	private val scheduleRepository: ScheduleRepository,
 	private val scheduleAttendeeRepository: ScheduleAttendeeRepository,
 	private val familyClient: FamilyClient,
+	private val notificationEventPublisher: NotificationEventPublisher,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
@@ -37,7 +42,11 @@ class ScheduleService(
 		}
 		familyId?.let { checkMember(it, me) }
 
-		val attendees = resolveAttendees(familyId, me, request.attendeeAccountIds, alreadyAttending = emptySet())
+		val attendees = if (request.isAllFamily) {
+			allFamily(familyId, request.attendeeAccountIds)
+		} else {
+			resolveAttendees(familyId, me, request.attendeeAccountIds, alreadyAttending = emptySet())
+		}
 		val (startAt, endAt) = period(request.isAllDay, request.startAt, request.endAt)
 
 		val schedule = scheduleRepository.save(
@@ -55,6 +64,8 @@ class ScheduleService(
 		val scheduleId = requireNotNull(schedule.scheduleId)
 		scheduleAttendeeRepository.saveAll(attendees.map { ScheduleAttendee(scheduleId = scheduleId, accountId = it) })
 
+		val type = if (request.isAllFamily) NotificationEventType.FAMILY_SCHEDULE_CREATED else NotificationEventType.SCHEDULE_ATTENDEE_ADDED
+		notify(type, schedule, attendees, actor = me)
 		log.debug("Schedule created. scheduleId={}, accountId={}", scheduleId, accountId)
 
 		return schedule.toResponse(attendees)
@@ -101,8 +112,11 @@ class ScheduleService(
 		val schedule = findAccessibleSchedule(me, scheduleId)
 		val current = scheduleAttendeeRepository.findAllByScheduleIdInAndIsDeletedFalse(listOf(scheduleId))
 
-		val attendees = resolveAttendees(schedule.familyId, me, request.attendeeAccountIds, current.map { it.accountId }.toSet())
+		val currentIds = current.map { it.accountId }.toSet()
+		val attendees = resolveAttendees(schedule.familyId, me, request.attendeeAccountIds, currentIds)
 		val (startAt, endAt) = period(request.isAllDay, request.startAt, request.endAt)
+		val changed = schedule.title != request.title || schedule.isAllDay != request.isAllDay ||
+			schedule.startAt != startAt || schedule.endAt != endAt
 
 		schedule.title = request.title
 		schedule.memo = request.memo
@@ -114,16 +128,28 @@ class ScheduleService(
 		current.filter { it.accountId !in attendees }.forEach { it.delete() }
 		scheduleAttendeeRepository.saveAll(current)
 		scheduleAttendeeRepository.saveAll(
-			(attendees - current.map { it.accountId }.toSet()).map { ScheduleAttendee(scheduleId = scheduleId, accountId = it) },
+			(attendees - currentIds).map { ScheduleAttendee(scheduleId = scheduleId, accountId = it) },
 		)
+
+		// 한 사람이 알림을 두 개 받지 않게 새 참석자 / 남은 참석자 / 빠진 참석자로 나눈다.
+		notify(NotificationEventType.SCHEDULE_ATTENDEE_ADDED, schedule, attendees - currentIds, actor = me)
+		if (changed) {
+			notify(NotificationEventType.SCHEDULE_UPDATED, schedule, attendees.filter { it in currentIds }, actor = me)
+		}
+		notify(NotificationEventType.SCHEDULE_CANCELED, schedule, currentIds - attendees.toSet(), actor = me)
 
 		return schedule.toResponse(attendees)
 	}
 
+	@Transactional
 	fun deleteSchedule(accountId: String, scheduleId: UUID) {
-		val schedule = findAccessibleSchedule(UUID.fromString(accountId), scheduleId)
+		val me = UUID.fromString(accountId)
+		val schedule = findAccessibleSchedule(me, scheduleId)
 		schedule.delete()
 		scheduleRepository.save(schedule)
+
+		val attendees = scheduleAttendeeRepository.findAllByScheduleIdInAndIsDeletedFalse(listOf(scheduleId)).map { it.accountId }
+		notify(NotificationEventType.SCHEDULE_CANCELED, schedule, attendees, actor = me)
 	}
 
 	// 볼 수 없는 일정은 존재 자체를 숨긴다.
@@ -166,6 +192,31 @@ class ScheduleService(
 			throw IeumException(PlannerErrorCode.INVALID_ATTENDEE)
 		}
 		return attendees
+	}
+
+	// 요청 시점 구성원으로 펼쳐 저장한다. 일정에 "전체" 표시는 남기지 않는다.
+	private fun allFamily(familyId: UUID?, attendeeAccountIds: List<UUID>): List<UUID> {
+		if (familyId == null || attendeeAccountIds.isNotEmpty()) {
+			throw IeumException(PlannerErrorCode.INVALID_ALL_FAMILY)
+		}
+		val family = familyClient.getFamily(familyId) ?: throw IeumException(PlannerErrorCode.FAMILY_NOT_FOUND)
+		return family.members.keys.toList()
+	}
+
+	// 받는 사람에서 행동한 본인은 발행기가 거른다.
+	private fun notify(type: NotificationEventType, schedule: Schedule, recipients: Collection<UUID>, actor: UUID) {
+		notificationEventPublisher.publish(
+			type,
+			NotificationEventData(
+				recipientAccountIds = recipients.toList(),
+				familyId = schedule.familyId,
+				targetType = NotificationTargetType.SCHEDULE,
+				targetId = schedule.scheduleId,
+				actorAccountId = actor,
+				subject = schedule.title,
+				at = schedule.startAt,
+			),
+		)
 	}
 
 	// 종일 일정은 시간을 버리고 날짜만 남긴다.

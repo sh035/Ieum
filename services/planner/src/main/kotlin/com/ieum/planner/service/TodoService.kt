@@ -1,5 +1,9 @@
 package com.ieum.planner.service
 
+import com.ieum.events.NotificationEventData
+import com.ieum.events.NotificationEventPublisher
+import com.ieum.events.NotificationEventType
+import com.ieum.events.NotificationTargetType
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.planner.controller.dto.request.CreateTodoRequest
 import com.ieum.planner.controller.dto.request.UpdateTodoRequest
@@ -26,10 +30,12 @@ class TodoService(
 	private val todoRepository: TodoRepository,
 	private val todoChecklistItemRepository: TodoChecklistItemRepository,
 	private val familyClient: FamilyClient,
+	private val notificationEventPublisher: NotificationEventPublisher,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
 
+	@Transactional
 	fun createTodo(accountId: String, request: CreateTodoRequest): TodoResponse {
 		val me = UUID.fromString(accountId)
 		checkDueTime(request.dueDate, request.dueTime)
@@ -65,6 +71,7 @@ class TodoService(
 			),
 		)
 
+		notify(NotificationEventType.TODO_ASSIGNED, todo, recipient = todo.assigneeAccountId, actor = me)
 		log.debug("Todo created. todoId={}, accountId={}", todo.todoId, accountId)
 
 		return todo.toResponse(checklistItems = emptyList())
@@ -131,13 +138,15 @@ class TodoService(
 	fun getTodo(accountId: String, todoId: UUID): TodoResponse =
 		toResponses(listOf(findAccessibleTodo(UUID.fromString(accountId), todoId))).single()
 
+	@Transactional
 	fun updateTodo(accountId: String, todoId: UUID, request: UpdateTodoRequest): TodoResponse {
 		val me = UUID.fromString(accountId)
 		val todo = findAccessibleTodo(me, todoId)
 		checkDueTime(request.dueDate, request.dueTime)
 
 		// 담당자를 바꿀 때만 확인한다. 기존 담당자가 가족을 나가도 다른 필드는 고칠 수 있어야 한다.
-		if (request.assigneeAccountId != todo.assigneeAccountId) {
+		val assigneeChanged = request.assigneeAccountId != todo.assigneeAccountId
+		if (assigneeChanged) {
 			todo.assigneeAccountId = resolveAssignee(todo.familyId, me, request.assigneeAccountId)
 		}
 		todo.title = request.title
@@ -146,7 +155,11 @@ class TodoService(
 		todo.dueDate = request.dueDate
 		todo.dueTime = request.dueTime
 
-		return toResponses(listOf(todoRepository.save(todo))).single()
+		val saved = todoRepository.save(todo)
+		if (assigneeChanged) {
+			notify(NotificationEventType.TODO_ASSIGNED, saved, recipient = saved.assigneeAccountId, actor = me)
+		}
+		return toResponses(listOf(saved)).single()
 	}
 
 	// 하위 할 일도 함께 삭제한다.
@@ -158,13 +171,19 @@ class TodoService(
 		todoRepository.saveAll(todos)
 	}
 
-	// 완료하면 하위 할 일도 함께 완료한다. 완료 취소는 이 할 일만 되돌린다.
+	// 완료하면 하위 할 일도 함께 완료한다. 완료 취소는 이 할 일만 되돌린다. 알림은 누른 할 일 하나만 보낸다.
 	@Transactional
 	fun updateCompletion(accountId: String, todoId: UUID, isCompleted: Boolean) {
-		val todo = findAccessibleTodo(UUID.fromString(accountId), todoId)
+		val me = UUID.fromString(accountId)
+		val todo = findAccessibleTodo(me, todoId)
+		val newlyCompleted = isCompleted && !todo.isCompleted
 		val todos = if (isCompleted) listOf(todo) + findDescendants(todoId) else listOf(todo)
 		todos.forEach { it.isCompleted = isCompleted }
 		todoRepository.saveAll(todos)
+
+		if (newlyCompleted) {
+			notify(NotificationEventType.TODO_COMPLETED, todo, recipient = todo.creatorAccountId, actor = me)
+		}
 	}
 
 	// 볼 수 없는 할 일은 존재 자체를 숨긴다. 체크리스트도 같은 권한을 따른다.
@@ -218,6 +237,22 @@ class TodoService(
 			throw IeumException(PlannerErrorCode.INVALID_ASSIGNEE)
 		}
 		return assigneeAccountId
+	}
+
+	// 받는 사람이 행동한 본인이면 발행기가 거른다.
+	private fun notify(type: NotificationEventType, todo: Todo, recipient: UUID, actor: UUID) {
+		notificationEventPublisher.publish(
+			type,
+			NotificationEventData(
+				recipientAccountIds = listOf(recipient),
+				familyId = todo.familyId,
+				targetType = NotificationTargetType.TODO,
+				targetId = todo.todoId,
+				actorAccountId = actor,
+				subject = todo.title,
+				at = todo.dueDate?.atTime(todo.dueTime ?: LocalTime.MIDNIGHT),
+			),
+		)
 	}
 
 	private fun checkMember(familyId: UUID, accountId: UUID) {

@@ -18,4 +18,6 @@ data class CreateScheduleRequest(
 	val startAt: LocalDateTime,
 	val endAt: LocalDateTime,
 	val attendeeAccountIds: List<UUID> = emptyList(),
+	// 지금 구성원 전체를 참석자로 넣는다. 나중에 들어온 가족은 수정에서 따로 넣는다.
+	val isAllFamily: Boolean = false,
 )
