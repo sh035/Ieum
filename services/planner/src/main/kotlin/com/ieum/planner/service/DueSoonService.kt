@@ -7,6 +7,7 @@ import com.ieum.events.NotificationTargetType
 import com.ieum.planner.repository.ScheduleAttendeeRepository
 import com.ieum.planner.repository.ScheduleRepository
 import com.ieum.planner.repository.TodoRepository
+import com.ieum.scheduler.SchedulerCheckpointService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -21,16 +22,19 @@ class DueSoonService(
 	private val scheduleRepository: ScheduleRepository,
 	private val scheduleAttendeeRepository: ScheduleAttendeeRepository,
 	private val notificationEventPublisher: NotificationEventPublisher,
+	private val schedulerCheckpointService: SchedulerCheckpointService,
 	private val clock: Clock,
 ) {
 
-	// 마감 / 시작이 (지금 + 3시간 - 2분, 지금 + 3시간] 인 것을 알린다.
-	// 서비스가 2분 넘게 내려가 있으면 그 사이 알림은 빠진다. 문제가 되면 보낸 시각을 기록하는 방식으로 바꾼다.
+	// 마감 / 시작이 (앞 회차가 처리한 지점, 지금 + 3시간] 인 것을 알린다.
+	// 10분보다 오래 멈췄다 살아나면 그 사이 알림은 건너뛴다. 3시간 전 시점이 이미 지난 알림은 보내지 않는다.
 	@Transactional
 	fun notifyDueSoon() {
-		val windowEnd = LocalDateTime.now(clock).truncatedTo(ChronoUnit.MINUTES).plus(LEAD_TIME)
-		val windowStart = windowEnd.minus(WINDOW)
+		val until = LocalDateTime.now(clock).truncatedTo(ChronoUnit.MINUTES).plus(LEAD_TIME)
+		schedulerCheckpointService.process(CHECKPOINT, until, MAX_CATCH_UP) { windowStart, windowEnd -> notify(windowStart, windowEnd) }
+	}
 
+	private fun notify(windowStart: LocalDateTime, windowEnd: LocalDateTime) {
 		todoRepository
 			.findAllByIsCompletedFalseAndIsDeletedFalseAndDueTimeIsNotNullAndDueDateBetween(windowStart.toLocalDate(), windowEnd.toLocalDate())
 			.forEach { todo ->
@@ -72,7 +76,8 @@ class DueSoonService(
 	}
 
 	companion object {
+		private const val CHECKPOINT = "planner-due-soon"
 		private val LEAD_TIME = Duration.ofHours(3)
-		private val WINDOW = Duration.ofMinutes(2)
+		private val MAX_CATCH_UP = Duration.ofMinutes(10)
 	}
 }

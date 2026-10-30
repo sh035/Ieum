@@ -15,6 +15,7 @@ import com.ieum.planner.repository.ScheduleRepository
 import com.ieum.planner.repository.TodoChecklistItemRepository
 import com.ieum.planner.repository.TodoRepository
 import com.ieum.planner.scheduler.DueSoonScheduler
+import com.ieum.planner.service.DueSoonService
 import com.ieum.scheduler.SchedulerConfig
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -29,17 +30,21 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
 import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.ZoneId
 import java.util.UUID
 import kotlin.test.assertEquals
 
 @SpringBootTest
 @RecordApplicationEvents
-@Import(DueSoonSchedulerTest.FixedClock::class)
+@Import(DueSoonSchedulerTest.TestClock::class)
 class DueSoonSchedulerTest @Autowired constructor(
 	private val dueSoonScheduler: DueSoonScheduler,
+	private val dueSoonService: DueSoonService,
+	private val clock: MovableClock,
 	private val todoRepository: TodoRepository,
 	private val todoChecklistItemRepository: TodoChecklistItemRepository,
 	private val scheduleRepository: ScheduleRepository,
@@ -47,13 +52,18 @@ class DueSoonSchedulerTest @Autowired constructor(
 	private val jdbcTemplate: JdbcTemplate,
 ) : PostgresTestSupport() {
 
-	// 16:00:30 에 돌면 마감 / 시작이 (18:58, 19:00] 인 것을 찾는다.
+	// 회차마다 시각을 옮겨 가며 이어서 처리하는지 본다.
+	class MovableClock(var now: LocalDateTime) : Clock() {
+		override fun getZone(): ZoneId = SchedulerConfig.SEOUL
+		override fun withZone(zone: ZoneId): Clock = this
+		override fun instant(): Instant = now.atZone(SchedulerConfig.SEOUL).toInstant()
+	}
+
 	@TestConfiguration
-	class FixedClock {
+	class TestClock {
 		@Bean
 		@Primary
-		fun fixedClock(): Clock =
-			Clock.fixed(LocalDateTime.of(2026, 10, 30, 16, 0, 30).atZone(SchedulerConfig.SEOUL).toInstant(), SchedulerConfig.SEOUL)
+		fun movableClock() = MovableClock(LocalDateTime.of(2026, 10, 30, 16, 0, 30))
 	}
 
 	@MockitoBean
@@ -74,13 +84,19 @@ class DueSoonSchedulerTest @Autowired constructor(
 		todoRepository.deleteAllInBatch()
 		scheduleAttendeeRepository.deleteAll()
 		scheduleRepository.deleteAll()
+		jdbcTemplate.update("DELETE FROM planner.scheduler_checkpoint")
 		// ShedLock 은 한 번 만든 락 행을 기억하고 UPDATE 만 하므로, 행을 지우지 않고 만료만 시킨다. 락 시각은 UTC 로 저장된다.
 		jdbcTemplate.update("UPDATE planner.shedlock SET lock_until = timezone('utc', now()) - interval '1 second'")
 	}
 
-	private fun published() = events.stream(NotificationEvent::class.java).toList()
+	private fun runAt(hour: Int, minute: Int, date: LocalDate = today) {
+		clock.now = date.atTime(hour, minute, 30)
+		dueSoonService.notifyDueSoon()
+	}
 
-	private fun todo(title: String, dueTime: LocalTime?, completed: Boolean = false, deleted: Boolean = false) =
+	private fun alertedTitles() = events.stream(NotificationEvent::class.java).toList().map { requireNotNull(it.data.subject) }
+
+	private fun todo(title: String, dueTime: LocalTime?, dueDate: LocalDate = today, completed: Boolean = false, deleted: Boolean = false) =
 		todoRepository.save(
 			Todo(
 				parentTodoId = null,
@@ -91,7 +107,7 @@ class DueSoonSchedulerTest @Autowired constructor(
 				memo = null,
 				visibility = Visibility.FAMILY,
 				priority = TodoPriority.MEDIUM,
-				dueDate = today,
+				dueDate = dueDate,
 				dueTime = dueTime,
 			).apply {
 				isCompleted = completed
@@ -99,7 +115,13 @@ class DueSoonSchedulerTest @Autowired constructor(
 			},
 		)
 
-	private fun schedule(title: String, startAt: LocalDateTime, isAllDay: Boolean = false, attendees: List<UUID> = listOf(mom, dad)): Schedule {
+	private fun schedule(
+		title: String,
+		startAt: LocalDateTime,
+		isAllDay: Boolean = false,
+		deleted: Boolean = false,
+		attendees: List<UUID> = listOf(mom, dad),
+	): Schedule {
 		val schedule = scheduleRepository.save(
 			Schedule(
 				familyId = familyId,
@@ -110,71 +132,113 @@ class DueSoonSchedulerTest @Autowired constructor(
 				isAllDay = isAllDay,
 				startAt = startAt,
 				endAt = startAt.plusHours(2),
-			),
+			).apply { if (deleted) delete() },
 		)
 		scheduleAttendeeRepository.saveAll(attendees.map { ScheduleAttendee(scheduleId = requireNotNull(schedule.scheduleId), accountId = it) })
 		return schedule
 	}
 
 	@Test
-	fun `마감 3시간 전이 된 미완료 할 일을 담당자에게 한 번씩 알린다`() {
+	fun `처음 돌면 최대 10분 전까지 거슬러 마감 3시간 전이 된 미완료 할 일을 담당자에게 알린다`() {
 		val dueAt7 = todo("분리수거하기", LocalTime.of(19, 0))
-		val dueAt659 = todo("빨래 걷기", LocalTime.of(18, 59))
-		todo("이미 지난 창", LocalTime.of(18, 58))
+		todo("빨래 걷기", LocalTime.of(18, 51))
+		todo("이미 지난 시점", LocalTime.of(18, 50))
 		todo("아직 이른 할 일", LocalTime.of(19, 1))
 		todo("끝낸 할 일", LocalTime.of(19, 0), completed = true)
 		todo("지운 할 일", LocalTime.of(19, 0), deleted = true)
 		todo("시간 없는 할 일", null)
 
-		dueSoonScheduler.run()
+		runAt(16, 0)
 
-		fun expected(todo: Todo, at: LocalDateTime) = NotificationEvent(
-			NotificationEventType.TODO_DUE_SOON,
-			NotificationEventData(
-				recipientAccountIds = listOf(dad),
-				familyId = familyId,
-				targetType = NotificationTargetType.TODO,
-				targetId = todo.todoId,
-				subject = todo.title,
-				at = at,
-				dedupKey = "TODO_DUE_SOON:${todo.todoId}:$at",
-			),
-		)
+		assertEquals(listOf("분리수거하기", "빨래 걷기"), alertedTitles().sorted())
+		val at = today.atTime(19, 0)
 		assertEquals(
-			setOf(expected(dueAt7, today.atTime(19, 0)), expected(dueAt659, today.atTime(18, 59))),
-			published().toSet(),
+			NotificationEvent(
+				NotificationEventType.TODO_DUE_SOON,
+				NotificationEventData(
+					recipientAccountIds = listOf(dad),
+					familyId = familyId,
+					targetType = NotificationTargetType.TODO,
+					targetId = dueAt7.todoId,
+					subject = "분리수거하기",
+					at = at,
+					dedupKey = "TODO_DUE_SOON:${dueAt7.todoId}:$at",
+				),
+			),
+			events.stream(NotificationEvent::class.java).toList().single { it.data.subject == "분리수거하기" },
 		)
 	}
 
 	@Test
-	fun `시작 3시간 전이 된 시간 일정을 참석자에게 알린다`() {
+	fun `다음 회차는 앞 회차가 처리한 지점부터 이어서 처리해 같은 할 일을 두 번 보내지 않는다`() {
+		todo("19시 할 일", LocalTime.of(19, 0))
+		todo("19시 1분 할 일", LocalTime.of(19, 1))
+		todo("19시 2분 할 일", LocalTime.of(19, 2))
+
+		runAt(16, 0)
+		runAt(16, 1)
+		runAt(16, 1)
+		runAt(16, 2)
+
+		assertEquals(listOf("19시 1분 할 일", "19시 2분 할 일", "19시 할 일"), alertedTitles().sorted())
+	}
+
+	@Test
+	fun `잠깐 멈췄다 살아나면 밀린 구간을 따라잡고 10분보다 오래 멈춘 구간은 건너뛴다`() {
+		todo("19시 3분 할 일", LocalTime.of(19, 3))
+		todo("19시 20분 할 일", LocalTime.of(19, 20))
+		todo("19시 35분 할 일", LocalTime.of(19, 35))
+
+		runAt(16, 0)
+		runAt(16, 5)
+		runAt(16, 40)
+
+		assertEquals(listOf("19시 35분 할 일", "19시 3분 할 일"), alertedTitles().sorted())
+	}
+
+	@Test
+	fun `자정을 넘는 구간도 다음 날 마감을 놓치지 않는다`() {
+		todo("오늘 밤 할 일", LocalTime.of(23, 55))
+		todo("내일 자정 할 일", LocalTime.MIDNIGHT, dueDate = today.plusDays(1))
+		todo("내일 아침 할 일", LocalTime.of(0, 1), dueDate = today.plusDays(1))
+
+		runAt(21, 0)
+
+		assertEquals(listOf("내일 자정 할 일", "오늘 밤 할 일"), alertedTitles().sorted())
+	}
+
+	@Test
+	fun `시작 3시간 전이 된 시간 일정을 남아 있는 참석자에게 알린다`() {
 		val dinner = schedule("가족 외식", today.atTime(19, 0), attendees = listOf(mom, dad, kid))
 		scheduleAttendeeRepository.findAllByScheduleIdInAndIsDeletedFalse(listOf(requireNotNull(dinner.scheduleId)))
 			.single { it.accountId == kid }
 			.also { it.delete() }
 			.also(scheduleAttendeeRepository::save)
+		schedule("10분 전 경계 안 일정", today.atTime(18, 51))
+		schedule("10분 전 경계 밖 일정", today.atTime(18, 50))
+		schedule("아직 이른 일정", today.atTime(19, 1))
 		schedule("종일 일정", today.atTime(19, 0), isAllDay = true)
-		schedule("다른 시각 일정", today.atTime(19, 30))
+		schedule("지운 일정", today.atTime(19, 0), deleted = true)
 
-		dueSoonScheduler.run()
+		runAt(16, 0)
 
+		assertEquals(listOf("10분 전 경계 안 일정", "가족 외식"), alertedTitles().sorted())
+		val event = events.stream(NotificationEvent::class.java).toList().single { it.data.subject == "가족 외식" }
 		val at = today.atTime(19, 0)
 		assertEquals(
-			listOf(
-				NotificationEvent(
-					NotificationEventType.SCHEDULE_STARTING_SOON,
-					NotificationEventData(
-						recipientAccountIds = listOf(mom, dad),
-						familyId = familyId,
-						targetType = NotificationTargetType.SCHEDULE,
-						targetId = dinner.scheduleId,
-						subject = "가족 외식",
-						at = at,
-						dedupKey = "SCHEDULE_STARTING_SOON:${dinner.scheduleId}:$at",
-					),
+			NotificationEvent(
+				NotificationEventType.SCHEDULE_STARTING_SOON,
+				NotificationEventData(
+					recipientAccountIds = listOf(mom, dad).sorted(),
+					familyId = familyId,
+					targetType = NotificationTargetType.SCHEDULE,
+					targetId = dinner.scheduleId,
+					subject = "가족 외식",
+					at = at,
+					dedupKey = "SCHEDULE_STARTING_SOON:${dinner.scheduleId}:$at",
 				),
 			),
-			published(),
+			event.copy(data = event.data.copy(recipientAccountIds = event.data.recipientAccountIds.sorted())),
 		)
 	}
 

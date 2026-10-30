@@ -4,6 +4,7 @@ import net.javacrumbs.shedlock.core.LockProvider
 import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider
 import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.AutoConfigurationPackage
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.jdbc.core.JdbcTemplate
@@ -13,7 +14,9 @@ import java.time.ZoneId
 import javax.sql.DataSource
 
 // Pod 가 여러 개여도 스케줄 작업은 한 Pod 에서만 돌도록 서비스 스키마의 shedlock 테이블로 락을 잡는다.
+// 이 패키지를 자동 설정 패키지에 더해, 쓰는 서비스가 따로 설정하지 않아도 체크포인트 엔티티 / 리포지토리가 잡히게 한다.
 @Configuration
+@AutoConfigurationPackage
 @EnableScheduling
 @EnableSchedulerLock(defaultLockAtMostFor = "PT5M")
 class SchedulerConfig {
