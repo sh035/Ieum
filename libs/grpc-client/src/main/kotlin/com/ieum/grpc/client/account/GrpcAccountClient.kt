@@ -28,6 +28,6 @@ class GrpcAccountClient(
 			it.getNicknames(GetNicknamesRequest.newBuilder().addAllAccountIds(accountIds.map(UUID::toString)).build())
 		}
 
-		return response.nicknamesMap.entries.associate { (accountId, nickname) -> UUID.fromString(accountId) to nickname }
+		return response.nicknamesMap.entries.associate { (accountId, nickname) -> accountId.toUuid() to nickname }
 	}
 }

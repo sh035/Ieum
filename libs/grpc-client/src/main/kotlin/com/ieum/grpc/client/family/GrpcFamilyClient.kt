@@ -46,7 +46,7 @@ class GrpcFamilyClient(
 			)
 		}
 
-		return response.rolesMap.entries.associate { (accountId, role) -> UUID.fromString(accountId) to role.toDomain() }
+		return response.rolesMap.entries.associate { (accountId, role) -> accountId.toUuid() to role.toDomain() }
 	}
 
 	override fun getFamily(familyId: UUID): FamilyInfo? {
@@ -55,7 +55,7 @@ class GrpcFamilyClient(
 
 		return FamilyInfo(
 			name = response.name,
-			members = response.membersList.associate { UUID.fromString(it.accountId) to it.role.toDomain() },
+			members = response.membersList.associate { it.accountId.toUuid() to it.role.toDomain() },
 		)
 	}
 

@@ -1,5 +1,6 @@
 package com.ieum.grpc.client.family
 
+import com.ieum.grpc.client.InProcessGrpcTestSupport
 import com.ieum.proto.family.v1.FamilyInternalServiceGrpc
 import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetFamilyResponse
@@ -8,17 +9,10 @@ import com.ieum.proto.family.v1.GetMemberRoleResponse
 import com.ieum.proto.family.v1.GetMemberRolesRequest
 import com.ieum.proto.family.v1.GetMemberRolesResponse
 import com.ieum.web.exception.IeumException
-import io.grpc.ManagedChannel
-import io.grpc.Server
 import io.grpc.Status
-import io.grpc.inprocess.InProcessChannelBuilder
-import io.grpc.inprocess.InProcessServerBuilder
 import io.grpc.stub.StreamObserver
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.springframework.grpc.client.ChannelBuilderOptions
-import org.springframework.grpc.client.GrpcChannelFactory
 import org.springframework.http.HttpStatus
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -30,49 +24,31 @@ import kotlin.test.assertTrue
 import com.ieum.proto.family.v1.FamilyMember as ProtoFamilyMember
 import com.ieum.proto.family.v1.FamilyRole as ProtoFamilyRole
 
-class GrpcFamilyClientTest {
+class GrpcFamilyClientTest : InProcessGrpcTestSupport() {
 
 	private val familyId = UUID.randomUUID()
 	private val accountId = UUID.randomUUID()
-	private val name = InProcessServerBuilder.generateName()
-	private var server: Server? = null
-	private var channel: ManagedChannel? = null
 
-	@AfterEach
-	fun tearDown() {
-		channel?.shutdownNow()
-		server?.shutdownNow()
-	}
-
-	// family 응답을 흉내 내는 in-process 서버에 붙은 클라이언트를 만든다.
+	// family 응답을 흉내 내는 서버에 붙은 클라이언트를 만든다.
 	private fun clientRespondingWith(
 		rolesRespond: (GetMemberRolesRequest, StreamObserver<GetMemberRolesResponse>) -> Unit = { _, _ -> },
 		familyRespond: (StreamObserver<GetFamilyResponse>) -> Unit = { },
 		respond: (StreamObserver<GetMemberRoleResponse>) -> Unit = { },
-	): GrpcFamilyClient {
-		server = InProcessServerBuilder.forName(name)
-			.addService(object : FamilyInternalServiceGrpc.FamilyInternalServiceImplBase() {
-				override fun getMemberRole(request: GetMemberRoleRequest, observer: StreamObserver<GetMemberRoleResponse>) {
-					respond(observer)
-				}
+	) = GrpcFamilyClient(
+		channelsFor(object : FamilyInternalServiceGrpc.FamilyInternalServiceImplBase() {
+			override fun getMemberRole(request: GetMemberRoleRequest, observer: StreamObserver<GetMemberRoleResponse>) {
+				respond(observer)
+			}
 
-				override fun getMemberRoles(request: GetMemberRolesRequest, observer: StreamObserver<GetMemberRolesResponse>) {
-					rolesRespond(request, observer)
-				}
+			override fun getMemberRoles(request: GetMemberRolesRequest, observer: StreamObserver<GetMemberRolesResponse>) {
+				rolesRespond(request, observer)
+			}
 
-				override fun getFamily(request: GetFamilyRequest, observer: StreamObserver<GetFamilyResponse>) {
-					familyRespond(observer)
-				}
-			})
-			.build()
-			.start()
-		val channel = InProcessChannelBuilder.forName(name).build().also { channel = it }
-
-		return GrpcFamilyClient(object : GrpcChannelFactory {
-			override fun supports(target: String) = true
-			override fun createChannel(target: String, options: ChannelBuilderOptions) = channel
-		})
-	}
+			override fun getFamily(request: GetFamilyRequest, observer: StreamObserver<GetFamilyResponse>) {
+				familyRespond(observer)
+			}
+		}),
+	)
 
 	private fun role(role: ProtoFamilyRole): (StreamObserver<GetMemberRoleResponse>) -> Unit = {
 		it.onNext(GetMemberRoleResponse.newBuilder().setRole(role).build())
@@ -110,7 +86,7 @@ class GrpcFamilyClientTest {
 	@Test
 	fun `family가 꺼져 있으면 503`() {
 		val client = clientRespondingWith(respond = role(ProtoFamilyRole.FAMILY_ROLE_OWNER))
-		server?.shutdownNow()
+		stopServer()
 
 		assertUnavailable(client)
 	}
