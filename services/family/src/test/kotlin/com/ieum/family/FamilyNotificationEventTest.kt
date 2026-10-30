@@ -12,6 +12,7 @@ import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -83,6 +84,8 @@ class FamilyNotificationEventTest @Autowired constructor(
 		mockMvc.post("/api/v1/family-invitation/$code/accept") { header("Authorization", "Bearer ${accessToken(newbie)}") }
 
 		assertEquals(listOf(familyEvent(NotificationEventType.FAMILY_MEMBER_JOINED, listOf(owner, member), familyId, newbie)), published())
+		// 커밋 뒤에만 Kafka 로 옮기는 리스너까지 이어지는지 본다.
+		verify(notificationEventRelay).relay(familyEvent(NotificationEventType.FAMILY_MEMBER_JOINED, listOf(owner, member), familyId, newbie))
 	}
 
 	private fun changeRole(familyId: UUID, familyMemberId: UUID?, role: String) =

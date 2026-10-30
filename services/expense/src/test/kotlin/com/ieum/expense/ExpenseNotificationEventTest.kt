@@ -7,11 +7,13 @@ import com.ieum.events.NotificationTargetType
 import com.ieum.expense.domain.entity.Budget
 import com.ieum.expense.repository.BudgetRepository
 import com.ieum.expense.repository.ExpenseRepository
+import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.grpc.client.family.FamilyInfo
 import com.ieum.grpc.client.family.FamilyRole
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -23,7 +25,9 @@ import org.springframework.test.context.event.RecordApplicationEvents
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.patch
 import org.springframework.test.web.servlet.post
+import com.ieum.web.exception.IeumException
 import tools.jackson.databind.ObjectMapper
+import java.time.LocalDateTime
 import java.util.UUID
 import kotlin.test.assertEquals
 
@@ -98,6 +102,7 @@ class ExpenseNotificationEventTest @Autowired constructor(
 			targetType = NotificationTargetType.BUDGET,
 			actorAccountId = me,
 			amount = over,
+			at = LocalDateTime.of(2026, 11, 1, 0, 0),
 			dedupKey = "BUDGET_EXCEEDED:$familyId:FAMILY:2026-11",
 		),
 	)
@@ -108,6 +113,8 @@ class ExpenseNotificationEventTest @Autowired constructor(
 		create(8000, payer = me)
 
 		assertEquals(listOf(payerEvent(member, expenseId, 12000)), published())
+		// 커밋 뒤에만 Kafka 로 옮기는 리스너까지 이어지는지 본다.
+		verify(notificationEventRelay).relay(payerEvent(member, expenseId, 12000))
 	}
 
 	@Test
@@ -147,6 +154,23 @@ class ExpenseNotificationEventTest @Autowired constructor(
 
 		create(60000, visibility = "PRIVATE")
 
+		assertEquals(emptyList<NotificationEvent>(), published())
+	}
+
+	@Test
+	fun `예산 알림용 가족 조회가 실패해도 지출은 저장된다`() {
+		budgetRepository.save(Budget(familyId = familyId, accountId = null, budgetMonth = null, amount = 50000))
+		`when`(familyClient.getFamily(familyId)).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+
+		val status = mockMvc.post("/api/v1/expense") {
+			header("Authorization", "Bearer ${accessToken(me)}")
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"familyId":"$familyId","visibility":"FAMILY","title":"이마트 장보기","amount":60000,""" +
+				""""category":"MART","spentDate":"2026-11-05","payerAccountId":"$me"}"""
+		}.andReturn().response.status
+
+		assertEquals(201, status)
+		assertEquals(1, expenseRepository.count())
 		assertEquals(emptyList<NotificationEvent>(), published())
 	}
 }

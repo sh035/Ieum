@@ -179,6 +179,7 @@ class ExpenseService(
 			.sumOf { it.amount.toLong() }
 
 	// 가족 지출이 그 달 가족 예산을 넘는 순간에만 OWNER / MANAGER 에게 알린다. 같은 달은 dedup 키로 한 번만 간다.
+	// 두 지출이 동시에 들어와 서로의 저장을 못 본 채 둘 다 예산 이하로 판단하면 알림이 빠진다. 드물어서 받아들이고, 문제가 되면 가족 단위 잠금으로 바꾼다.
 	private fun checkFamilyBudget(expense: Expense, month: YearMonth, before: Long, me: UUID) {
 		if (expense.visibility != Visibility.FAMILY) return
 		val budget = budgetService.findEffectiveAmount(expense.familyId, null, month) ?: return
@@ -186,8 +187,13 @@ class ExpenseService(
 		val after = familyTotal(expense.familyId, month)
 		if (before > budget || after <= budget) return
 
-		val managers = familyClient.getFamily(expense.familyId)?.members
-			?.filterValues(BudgetService::canManageFamilyBudget)?.keys.orEmpty()
+		// 알림 때문에 지출 저장이 취소되면 안 되므로 조회 실패는 알림만 포기한다.
+		val managers = try {
+			familyClient.getFamily(expense.familyId)?.members?.filterValues(BudgetService::canManageFamilyBudget)?.keys.orEmpty()
+		} catch (e: IeumException) {
+			log.warn("Budget notification skipped. familyId={}, message={}", expense.familyId, e.message)
+			return
+		}
 		notificationEventPublisher.publish(
 			NotificationEventType.BUDGET_EXCEEDED,
 			NotificationEventData(
@@ -196,6 +202,7 @@ class ExpenseService(
 				targetType = NotificationTargetType.BUDGET,
 				actorAccountId = me,
 				amount = (after - budget).toInt(),
+				at = month.atDay(1).atStartOfDay(),
 				dedupKey = "BUDGET_EXCEEDED:${expense.familyId}:FAMILY:$month",
 			),
 		)

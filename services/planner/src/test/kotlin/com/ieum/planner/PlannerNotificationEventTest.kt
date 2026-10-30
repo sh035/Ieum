@@ -13,6 +13,7 @@ import com.ieum.planner.repository.TodoChecklistItemRepository
 import com.ieum.planner.repository.TodoRepository
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -106,6 +107,8 @@ class PlannerNotificationEventTest @Autowired constructor(
 		val todoId = id(send("POST", "/api/v1/todo", body = familyTodo(member)), "todoId")
 
 		assertEquals(listOf(todoEvent(NotificationEventType.TODO_ASSIGNED, member, todoId, me)), published())
+		// 커밋 뒤에만 Kafka 로 옮기는 리스너까지 이어지는지 본다.
+		verify(notificationEventRelay).relay(todoEvent(NotificationEventType.TODO_ASSIGNED, member, todoId, me))
 	}
 
 	@Test

@@ -33,7 +33,9 @@ class NotificationMessageComposer {
 			)
 			NotificationEventType.EXPENSE_PAYER_ASSIGNED ->
 				NotificationMessage("${nickname}님이 지출을 등록했어요", "$subject · $amount")
-			NotificationEventType.BUDGET_EXCEEDED -> NotificationMessage("이번 달 예산을 넘었어요", "$amount 초과")
+			// 지난달 영수증을 늦게 넣을 수 있어서 판정한 달을 쓴다.
+			NotificationEventType.BUDGET_EXCEEDED ->
+				NotificationMessage("${data.at?.let { "${it.monthValue}월" } ?: "이번 달"} 예산을 넘었어요", "$amount 초과")
 			NotificationEventType.TODO_DUE_SOON -> NotificationMessage("3시간 뒤 마감이에요", subject)
 			NotificationEventType.SCHEDULE_STARTING_SOON -> NotificationMessage("3시간 뒤 일정이 있어요", subject)
 		}
