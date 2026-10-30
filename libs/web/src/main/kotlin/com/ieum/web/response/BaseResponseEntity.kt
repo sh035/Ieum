@@ -14,6 +14,9 @@ class BaseResponseEntity : ResponseEntity<BaseResponse> {
 		fun <T> single(body: T): BaseResponseEntity =
 			BaseResponseEntity(SingleResponse(HttpStatus.OK, body), HttpStatus.OK)
 
+		fun <T> page(data: List<T>, totalCount: Long, currentPage: Int, size: Int): BaseResponseEntity =
+			BaseResponseEntity(PageResponse(HttpStatus.OK, data, totalCount, currentPage, size), HttpStatus.OK)
+
 		fun created(): BaseResponseEntity =
 			BaseResponseEntity(HttpStatus.CREATED)
 
