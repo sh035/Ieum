@@ -12,5 +12,6 @@ include(
 	"libs:security",
 	"libs:proto",
 	"libs:grpc-client",
+	"libs:grpc-server",
 //	"libs:events",
 )

@@ -6,7 +6,7 @@ dependencies {
 	implementation(project(":libs:web"))
 	implementation(project(":libs:security"))
 	implementation(project(":libs:proto"))
-	implementation("org.springframework.boot:spring-boot-starter-grpc-server")
+	implementation(project(":libs:grpc-server"))
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
