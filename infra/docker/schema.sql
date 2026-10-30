@@ -234,3 +234,39 @@ CREATE TABLE expense.budget
 CREATE UNIQUE INDEX uk_budget_family_id_account_id_budget_month
 	ON expense.budget (family_id, account_id, budget_month) NULLS NOT DISTINCT
 	WHERE is_deleted = false;
+
+-- family_id 가 없으면 가족과 무관한 알림이다 (알림함 개인 탭).
+CREATE TABLE notification.notification
+(
+	notification_id uuid PRIMARY KEY,
+	account_id      uuid         NOT NULL,
+	family_id       uuid,
+	type            varchar(40)  NOT NULL,
+	title           varchar(100) NOT NULL,
+	body            varchar(200) NOT NULL,
+	target_type     varchar(20),
+	target_id       uuid,
+	dedup_key       varchar(200) NOT NULL,
+	is_read         boolean      NOT NULL DEFAULT false,
+	created_at      timestamp(6) NOT NULL,
+	updated_at      timestamp(6),
+	is_deleted      boolean      NOT NULL DEFAULT false
+);
+
+-- 지운 알림도 다시 오면 안 되므로 is_deleted 와 상관없이 막는다.
+CREATE UNIQUE INDEX uk_notification_account_id_dedup_key ON notification.notification (account_id, dedup_key);
+CREATE INDEX idx_notification_account_id_created_at ON notification.notification (account_id, created_at DESC);
+
+CREATE TABLE notification.device_token
+(
+	device_token_id uuid PRIMARY KEY,
+	account_id      uuid         NOT NULL,
+	token           varchar(500) NOT NULL,
+	platform        varchar(20)  NOT NULL,
+	created_at      timestamp(6) NOT NULL,
+	updated_at      timestamp(6),
+	is_deleted      boolean      NOT NULL DEFAULT false
+);
+
+CREATE UNIQUE INDEX uk_device_token_token ON notification.device_token (token) WHERE is_deleted = false;
+CREATE INDEX idx_device_token_account_id ON notification.device_token (account_id);
