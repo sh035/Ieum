@@ -22,4 +22,10 @@ interface ScheduleRepository : JpaRepository<Schedule, UUID> {
 		rangeEnd: LocalDateTime,
 		rangeStart: LocalDateTime,
 	): List<Schedule>
+
+	// 3시간 전 알림 후보다. 종일 일정은 시각이 없어 브리핑으로만 알린다.
+	fun findAllByIsAllDayFalseAndIsDeletedFalseAndStartAtGreaterThanAndStartAtLessThanEqual(
+		from: LocalDateTime,
+		to: LocalDateTime,
+	): List<Schedule>
 }

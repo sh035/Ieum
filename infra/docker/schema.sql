@@ -141,6 +141,15 @@ CREATE UNIQUE INDEX uk_schedule_attendee_schedule_id_account_id
 	ON planner.schedule_attendee (schedule_id, account_id)
 	WHERE is_deleted = false;
 
+-- ShedLock 이 관리하는 스케줄 작업 락. 라이브러리 표준 형식이라 공통 컬럼 규칙을 따르지 않는다.
+CREATE TABLE planner.shedlock
+(
+	name       varchar(64)  NOT NULL PRIMARY KEY,
+	lock_until timestamp    NOT NULL,
+	locked_at  timestamp    NOT NULL,
+	locked_by  varchar(255) NOT NULL
+);
+
 -- 보관 장소는 가족이 직접 만들어 쓴다.
 CREATE TABLE grocery.storage
 (

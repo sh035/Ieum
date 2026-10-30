@@ -49,6 +49,8 @@ abstract class PostgresTestSupport {
 		fun jwtKeys(registry: DynamicPropertyRegistry) {
 			registry.add("jwt.public-key") { Base64.getEncoder().encodeToString(keyPair.public.encoded) }
 			registry.add("spring.kafka.bootstrap-servers") { "localhost:9092" }
+			// 테스트 중 실제 시계로 스케줄이 돌면 락을 먼저 잡아 테스트 호출이 건너뛰어진다.
+			registry.add("planner.scheduler.due-soon-cron") { "-" }
 		}
 
 		fun accessToken(accountId: UUID): String {

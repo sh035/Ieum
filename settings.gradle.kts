@@ -14,4 +14,5 @@ include(
 	"libs:grpc-client",
 	"libs:grpc-server",
 	"libs:events",
+	"libs:scheduler",
 )

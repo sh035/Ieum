@@ -37,4 +37,7 @@ interface TodoRepository : JpaRepository<Todo, UUID> {
 		creatorAccountId: UUID,
 		visibility: Visibility,
 	): List<Todo>
+
+	// 3시간 전 알림 후보다. 시각까지 있는 미완료 할 일만 본다.
+	fun findAllByIsCompletedFalseAndIsDeletedFalseAndDueTimeIsNotNullAndDueDateBetween(from: LocalDate, to: LocalDate): List<Todo>
 }
