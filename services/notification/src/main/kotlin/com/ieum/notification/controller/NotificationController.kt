@@ -2,9 +2,11 @@ package com.ieum.notification.controller
 
 import com.ieum.notification.domain.enums.NotificationTab
 import com.ieum.notification.service.NotificationInboxService
+import com.ieum.notification.service.delivery.SseEmitterRegistry
 import com.ieum.web.response.BaseResponseEntity
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
+import org.springframework.http.MediaType
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -14,13 +16,20 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.util.UUID
 
 @RestController
 @RequestMapping("/api/v1/notification")
 class NotificationController(
 	private val notificationInboxService: NotificationInboxService,
+	private val sseEmitterRegistry: SseEmitterRegistry,
 ) {
+
+	@GetMapping("/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
+	fun stream(@AuthenticationPrincipal jwt: Jwt): SseEmitter {
+		return sseEmitterRegistry.connect(UUID.fromString(jwt.subject))
+	}
 
 	@GetMapping
 	fun getNotifications(

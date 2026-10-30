@@ -18,6 +18,9 @@ class KafkaConfig {
 	fun notificationTopic() = TopicBuilder.name(Topics.NOTIFICATION).build()
 
 	@Bean
+	fun notificationDeliveryTopic() = TopicBuilder.name(Topics.NOTIFICATION_DELIVERY).build()
+
+	@Bean
 	fun notificationDltTopic() = TopicBuilder.name(Topics.NOTIFICATION_DLT).build()
 
 	// 일시 장애(gRPC 등)는 두 번 더 시도하고, 그래도 실패하거나 다시 해도 소용없는 메시지는 DLT 로 보내고 다음으로 넘어간다.

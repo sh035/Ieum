@@ -31,7 +31,7 @@ class NotificationInboxService(
 		// 같은 시각이면 시간순 UUID(v7) 로 순서를 고정한다.
 		val pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("notificationId")))
 
-		return notificationRepository.findAll(Specification.where(inTab(me, tab, familyId)), pageable).map { it.toResponse() }
+		return notificationRepository.findAll(Specification.where(inTab(me, tab, familyId)), pageable).map(NotificationResponse::from)
 	}
 
 	fun getUnreadCount(accountId: String, tab: NotificationTab, familyId: UUID?): UnreadCountResponse {
@@ -96,16 +96,4 @@ class NotificationInboxService(
 		}
 		return familyId
 	}
-
-	private fun Notification.toResponse() = NotificationResponse(
-		notificationId = requireNotNull(notificationId),
-		familyId = familyId,
-		type = type,
-		title = title,
-		body = body,
-		targetType = targetType,
-		targetId = targetId,
-		isRead = isRead,
-		createdAt = createdAt,
-	)
 }
