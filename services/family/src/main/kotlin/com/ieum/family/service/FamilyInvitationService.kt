@@ -1,5 +1,9 @@
 package com.ieum.family.service
 
+import com.ieum.events.NotificationEventData
+import com.ieum.events.NotificationEventPublisher
+import com.ieum.events.NotificationEventType
+import com.ieum.events.NotificationTargetType
 import com.ieum.family.controller.dto.response.FamilyInvitationResponse
 import com.ieum.family.controller.dto.response.FamilyResponse
 import com.ieum.family.controller.dto.response.InvitedFamilyResponse
@@ -26,6 +30,7 @@ class FamilyInvitationService(
 	private val familyRepository: FamilyRepository,
 	private val familyMemberRepository: FamilyMemberRepository,
 	private val familyInvitationRepository: FamilyInvitationRepository,
+	private val notificationEventPublisher: NotificationEventPublisher,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
@@ -79,26 +84,33 @@ class FamilyInvitationService(
 		return InvitedFamilyResponse(familyId = requireNotNull(family.familyId), name = family.name)
 	}
 
+	@Transactional
 	fun acceptInvitation(accountId: String, code: String): FamilyResponse {
+		val me = UUID.fromString(accountId)
 		val family = findInvitedFamily(code)
 		val familyId = requireNotNull(family.familyId)
 
-		if (familyMemberRepository.existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, UUID.fromString(accountId))) {
+		if (familyMemberRepository.existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, me)) {
 			throw IeumException(FamilyErrorCode.ALREADY_FAMILY_MEMBER)
 		}
 
-		// 동시 수락은 exists 확인을 함께 통과하므로 unique index 위반으로 걸러낸다.
+		// 동시 수락은 exists 확인을 함께 통과하므로 unique index 위반으로 걸러낸다. 트랜잭션 안이라 바로 flush 해야 여기서 잡힌다.
 		try {
-			familyMemberRepository.save(
-				FamilyMember(
-					familyId = familyId,
-					accountId = UUID.fromString(accountId),
-					role = FamilyRole.MEMBER,
-				),
-			)
+			familyMemberRepository.saveAndFlush(FamilyMember(familyId = familyId, accountId = me, role = FamilyRole.MEMBER))
 		} catch (e: DataIntegrityViolationException) {
 			throw IeumException(FamilyErrorCode.ALREADY_FAMILY_MEMBER)
 		}
+
+		notificationEventPublisher.publish(
+			NotificationEventType.FAMILY_MEMBER_JOINED,
+			NotificationEventData(
+				recipientAccountIds = familyMemberRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId).map { it.accountId },
+				familyId = familyId,
+				targetType = NotificationTargetType.FAMILY,
+				targetId = familyId,
+				actorAccountId = me,
+			),
+		)
 
 		log.debug("Family invitation accepted. familyId={}, accountId={}", familyId, accountId)
 

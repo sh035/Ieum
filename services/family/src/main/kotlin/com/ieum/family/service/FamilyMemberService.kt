@@ -1,5 +1,9 @@
 package com.ieum.family.service
 
+import com.ieum.events.NotificationEventData
+import com.ieum.events.NotificationEventPublisher
+import com.ieum.events.NotificationEventType
+import com.ieum.events.NotificationTargetType
 import com.ieum.family.controller.dto.request.UpdateFamilyMemberRoleRequest
 import com.ieum.family.controller.dto.response.FamilyMemberResponse
 import com.ieum.family.controller.dto.response.FamilyMemberRoleResponse
@@ -9,11 +13,13 @@ import com.ieum.family.exception.FamilyErrorCode
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.web.exception.IeumException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
 @Service
 class FamilyMemberService(
 	private val familyMemberRepository: FamilyMemberRepository,
+	private val notificationEventPublisher: NotificationEventPublisher,
 ) {
 
 	// 가입한 순서대로 반환한다. 구성원이 아니면 가족의 존재 자체를 숨긴다.
@@ -28,6 +34,7 @@ class FamilyMemberService(
 	}
 
 	// OWNER 가 구성원을 MEMBER <-> MANAGER 로 바꾼다. OWNER 역할은 이 API 로 주거나 뺏을 수 없다.
+	@Transactional
 	fun updateRole(
 		accountId: String,
 		familyId: UUID,
@@ -46,8 +53,24 @@ class FamilyMemberService(
 			throw IeumException(FamilyErrorCode.INVALID_ROLE_CHANGE)
 		}
 
+		val changed = member.role != request.role
 		member.role = request.role
-		return familyMemberRepository.save(member).toResponse()
+		val saved = familyMemberRepository.save(member)
+
+		if (changed) {
+			notificationEventPublisher.publish(
+				NotificationEventType.FAMILY_ROLE_CHANGED,
+				NotificationEventData(
+					recipientAccountIds = listOf(member.accountId),
+					familyId = familyId,
+					targetType = NotificationTargetType.FAMILY,
+					targetId = familyId,
+					actorAccountId = requester.accountId,
+					role = request.role.name,
+				),
+			)
+		}
+		return saved.toResponse()
 	}
 
 	fun getRole(familyId: UUID, accountId: UUID): FamilyMemberRoleResponse {
