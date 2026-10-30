@@ -2,12 +2,12 @@ package com.ieum.notification.service.delivery
 
 import com.ieum.notification.domain.entity.Notification
 import com.ieum.notification.repository.DeviceTokenRepository
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.stereotype.Component
 
 // 앱이 꺼져 있어도 받도록 계정의 모든 기기로 보낸다. 키가 없는 로컬 / 테스트에서는 빈을 만들지 않는다.
 @Component
-@ConditionalOnProperty("firebase.credentials-path")
+@ConditionalOnExpression(FcmClient.ENABLED)
 class FcmNotificationSender(
 	private val fcmClient: FcmClient,
 	private val deviceTokenRepository: DeviceTokenRepository,

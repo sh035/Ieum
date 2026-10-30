@@ -22,7 +22,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.util.UUID
 import kotlin.test.assertEquals
 
-@SpringBootTest(properties = ["firebase.credentials-path=/not-used"])
+@SpringBootTest(properties = ["firebase.credentials=not-used"])
 class FcmNotificationSenderTest @Autowired constructor(
 	private val fcmNotificationSender: FcmNotificationSender,
 	private val notificationRepository: NotificationRepository,

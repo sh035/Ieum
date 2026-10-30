@@ -7,20 +7,21 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.MessagingErrorCode
 import com.google.firebase.messaging.MulticastMessage
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.stereotype.Component
-import java.io.FileInputStream
+import java.util.Base64
 import com.google.firebase.messaging.Notification as FcmNotification
 
 // Firebase 메시지 객체는 내용을 꺼내 볼 수 없어서, 테스트가 정확한 값으로 검증할 수 있게 이 경계에서 감싼다.
 @Component
-@ConditionalOnProperty("firebase.credentials-path")
+@ConditionalOnExpression(FcmClient.ENABLED)
 class FcmClient(
-	@Value("\${firebase.credentials-path}") credentialsPath: String,
+	@Value("\${firebase.credentials}") credentials: String,
 ) {
 
-	private val messaging: FirebaseMessaging = FileInputStream(credentialsPath).use { credentials ->
-		val options = FirebaseOptions.builder().setCredentials(GoogleCredentials.fromStream(credentials)).build()
+	// 서비스 계정 JSON 을 base64 로 받는다 (JWT 키와 같은 방식).
+	private val messaging: FirebaseMessaging = Base64.getDecoder().decode(credentials).inputStream().use { json ->
+		val options = FirebaseOptions.builder().setCredentials(GoogleCredentials.fromStream(json)).build()
 		FirebaseMessaging.getInstance(FirebaseApp.initializeApp(options))
 	}
 
@@ -41,6 +42,8 @@ class FcmClient(
 	}
 
 	companion object {
+		// 키가 비어 있는 로컬 / 테스트에서는 FCM 빈을 만들지 않는다.
+		const val ENABLED = "'\${firebase.credentials:}' != ''"
 		private val INVALID_TOKEN_CODES = setOf(MessagingErrorCode.UNREGISTERED, MessagingErrorCode.INVALID_ARGUMENT)
 	}
 }

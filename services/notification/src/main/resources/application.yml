@@ -31,3 +31,6 @@ server:
 
 jwt:
   public-key: ${JWT_PUBLIC_KEY}
+
+firebase:
+  credentials: ${FIREBASE_CREDENTIALS:}
