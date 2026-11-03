@@ -28,4 +28,10 @@ interface ScheduleRepository : JpaRepository<Schedule, UUID> {
 		from: LocalDateTime,
 		to: LocalDateTime,
 	): List<Schedule>
+
+	// 브리핑 후보다. 기간이 겹치는 모든 일정을 본다.
+	fun findAllByStartAtLessThanAndEndAtGreaterThanEqualAndIsDeletedFalse(
+		rangeEnd: LocalDateTime,
+		rangeStart: LocalDateTime,
+	): List<Schedule>
 }

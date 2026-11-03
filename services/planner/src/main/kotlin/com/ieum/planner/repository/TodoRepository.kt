@@ -40,4 +40,7 @@ interface TodoRepository : JpaRepository<Todo, UUID> {
 
 	// 3시간 전 알림 후보다. 시각까지 있는 미완료 할 일만 본다.
 	fun findAllByIsCompletedFalseAndIsDeletedFalseAndDueTimeIsNotNullAndDueDateBetween(from: LocalDate, to: LocalDate): List<Todo>
+
+	// 브리핑 후보다. 오늘 마감과 기한이 지난 미완료 할 일을 함께 본다.
+	fun findAllByIsCompletedFalseAndIsDeletedFalseAndDueDateLessThanEqual(date: LocalDate): List<Todo>
 }

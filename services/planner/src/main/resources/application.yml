@@ -28,6 +28,8 @@ spring:
 server:
   port: 8083
 
+spring.grpc.server.port: 9083
+
 planner:
   scheduler:
     due-soon-cron: "0 * * * * *"
