@@ -1,5 +1,9 @@
 package com.ieum.family.service
 
+import com.ieum.events.NotificationEventData
+import com.ieum.events.NotificationEventPublisher
+import com.ieum.events.NotificationEventType
+import com.ieum.events.NotificationTargetType
 import com.ieum.family.controller.dto.response.CreateFamilyResponse
 import com.ieum.family.controller.dto.response.FamilyInfoResponse
 import com.ieum.family.controller.dto.response.FamilyResponse
@@ -7,6 +11,7 @@ import com.ieum.family.domain.entity.Family
 import com.ieum.family.domain.entity.FamilyMember
 import com.ieum.family.domain.enums.FamilyRole
 import com.ieum.family.exception.FamilyErrorCode
+import com.ieum.family.repository.FamilyInvitationRepository
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
 import com.ieum.web.exception.IeumException
@@ -19,6 +24,8 @@ import java.util.UUID
 class FamilyService(
 	private val familyRepository: FamilyRepository,
 	private val familyMemberRepository: FamilyMemberRepository,
+	private val familyInvitationRepository: FamilyInvitationRepository,
+	private val notificationEventPublisher: NotificationEventPublisher,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
@@ -50,6 +57,37 @@ class FamilyService(
 		return members.mapNotNull { member ->
 			families[member.familyId]?.let { FamilyResponse(familyId = member.familyId, name = it.name, role = member.role) }
 		}
+	}
+
+	// OWNER 는 다른 구성원이 있으면 소유권을 먼저 넘겨야 한다. 혼자 남은 OWNER 가 나가면 가족을 삭제한다.
+	@Transactional
+	fun leave(accountId: String, familyId: UUID) {
+		val me = UUID.fromString(accountId)
+		val members = familyMemberRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId)
+		val mine = members.find { it.accountId == me } ?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
+		val others = members - mine
+		if (mine.role == FamilyRole.OWNER && others.isNotEmpty()) {
+			throw IeumException(FamilyErrorCode.OWNERSHIP_TRANSFER_REQUIRED)
+		}
+
+		mine.delete()
+		if (others.isEmpty()) {
+			familyRepository.findByFamilyIdAndIsDeletedFalse(familyId)?.delete()
+			familyInvitationRepository.findByFamilyIdAndIsDeletedFalse(familyId)?.delete()
+			log.debug("Family deleted. familyId={}, accountId={}", familyId, accountId)
+			return
+		}
+
+		notificationEventPublisher.publish(
+			NotificationEventType.FAMILY_MEMBER_LEFT,
+			NotificationEventData(
+				recipientAccountIds = others.map { it.accountId },
+				familyId = familyId,
+				targetType = NotificationTargetType.FAMILY,
+				targetId = familyId,
+				actorAccountId = me,
+			),
+		)
 	}
 
 	// 서비스 간 호출용이라 요청자 권한은 보지 않는다.

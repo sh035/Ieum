@@ -73,6 +73,49 @@ class FamilyMemberService(
 		return saved.toResponse()
 	}
 
+	// OWNER 만 내보낼 수 있고 OWNER 는 내보낼 수 없다. 내보낸 사람은 가족 화면에 들어갈 수 없어 알림에 이동 대상을 넣지 않는다.
+	@Transactional
+	fun removeMember(accountId: String, familyId: UUID, familyMemberId: UUID) {
+		val owner = findOwner(accountId, familyId)
+		val member = familyMemberRepository.findByFamilyMemberIdAndFamilyIdAndIsDeletedFalse(familyMemberId, familyId)
+			?: throw IeumException(FamilyErrorCode.FAMILY_MEMBER_NOT_FOUND)
+		if (member.role == FamilyRole.OWNER) {
+			throw IeumException(FamilyErrorCode.CANNOT_REMOVE_OWNER)
+		}
+
+		member.delete()
+
+		notificationEventPublisher.publish(
+			NotificationEventType.FAMILY_MEMBER_REMOVED,
+			NotificationEventData(recipientAccountIds = listOf(member.accountId), familyId = familyId, actorAccountId = owner.accountId),
+		)
+	}
+
+	// 넘긴 OWNER 는 MEMBER 가 된다.
+	@Transactional
+	fun transferOwnership(accountId: String, familyId: UUID, familyMemberId: UUID) {
+		val owner = findOwner(accountId, familyId)
+		val member = familyMemberRepository.findByFamilyMemberIdAndFamilyIdAndIsDeletedFalse(familyMemberId, familyId)
+			?: throw IeumException(FamilyErrorCode.FAMILY_MEMBER_NOT_FOUND)
+		if (member.familyMemberId == owner.familyMemberId) {
+			throw IeumException(FamilyErrorCode.INVALID_OWNERSHIP_TRANSFER)
+		}
+
+		owner.role = FamilyRole.MEMBER
+		member.role = FamilyRole.OWNER
+
+		notificationEventPublisher.publish(
+			NotificationEventType.FAMILY_OWNERSHIP_TRANSFERRED,
+			NotificationEventData(
+				recipientAccountIds = listOf(member.accountId),
+				familyId = familyId,
+				targetType = NotificationTargetType.FAMILY,
+				targetId = familyId,
+				actorAccountId = owner.accountId,
+			),
+		)
+	}
+
 	fun getRole(familyId: UUID, accountId: UUID): FamilyMemberRoleResponse {
 		val member = familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, accountId)
 			?: throw IeumException(FamilyErrorCode.FAMILY_MEMBER_NOT_FOUND)
@@ -84,6 +127,15 @@ class FamilyMemberService(
 	fun getRoles(familyId: UUID, accountIds: Collection<UUID>): Map<UUID, FamilyRole> =
 		familyMemberRepository.findAllByFamilyIdAndAccountIdInAndIsDeletedFalse(familyId, accountIds)
 			.associate { it.accountId to it.role }
+
+	private fun findOwner(accountId: String, familyId: UUID): FamilyMember {
+		val requester = familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, UUID.fromString(accountId))
+			?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
+		if (requester.role != FamilyRole.OWNER) {
+			throw IeumException(FamilyErrorCode.FAMILY_ACCESS_DENIED)
+		}
+		return requester
+	}
 
 	private fun FamilyMember.toResponse() = FamilyMemberResponse(
 		familyMemberId = requireNotNull(familyMemberId),

@@ -20,6 +20,7 @@ import org.springframework.http.MediaType
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.patch
 import org.springframework.test.web.servlet.post
 import tools.jackson.databind.ObjectMapper
@@ -104,5 +105,59 @@ class FamilyNotificationEventTest @Autowired constructor(
 		changeRole(familyId, target.familyMemberId, "MANAGER")
 
 		assertEquals(listOf(familyEvent(NotificationEventType.FAMILY_ROLE_CHANGED, listOf(member), familyId, owner, role = "MANAGER")), published())
+	}
+
+	private fun saveMember(familyId: UUID, accountId: UUID) =
+		requireNotNull(familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = accountId, role = FamilyRole.MEMBER)).familyMemberId)
+
+	@Test
+	fun `스스로 나가면 남은 구성원에게 알린다`() {
+		val familyId = createFamily()
+		saveMember(familyId, member)
+		saveMember(familyId, newbie)
+
+		mockMvc.post("/api/v1/family/$familyId/leave") { header("Authorization", "Bearer ${accessToken(newbie)}") }
+
+		assertEquals(listOf(familyEvent(NotificationEventType.FAMILY_MEMBER_LEFT, listOf(owner, member), familyId, newbie)), published())
+	}
+
+	@Test
+	fun `혼자 남은 OWNER가 나가면 알림이 없다`() {
+		val familyId = createFamily()
+
+		mockMvc.post("/api/v1/family/$familyId/leave") { header("Authorization", "Bearer ${accessToken(owner)}") }
+
+		assertEquals(emptyList(), published())
+	}
+
+	@Test
+	fun `내보내면 내보낸 사람에게만 알리고 가족 화면으로 이동하지 않는다`() {
+		val familyId = createFamily()
+		val familyMemberId = saveMember(familyId, member)
+		saveMember(familyId, newbie)
+
+		mockMvc.delete("/api/v1/family/$familyId/member/$familyMemberId") { header("Authorization", "Bearer ${accessToken(owner)}") }
+
+		assertEquals(
+			listOf(
+				NotificationEvent(
+					NotificationEventType.FAMILY_MEMBER_REMOVED,
+					NotificationEventData(recipientAccountIds = listOf(member), familyId = familyId, actorAccountId = owner),
+				),
+			),
+			published(),
+		)
+	}
+
+	@Test
+	fun `소유권을 넘기면 새 OWNER에게 알린다`() {
+		val familyId = createFamily()
+		val familyMemberId = saveMember(familyId, member)
+
+		mockMvc.post("/api/v1/family/$familyId/member/$familyMemberId/transfer-ownership") {
+			header("Authorization", "Bearer ${accessToken(owner)}")
+		}
+
+		assertEquals(listOf(familyEvent(NotificationEventType.FAMILY_OWNERSHIP_TRANSFERRED, listOf(member), familyId, owner)), published())
 	}
 }
