@@ -60,11 +60,15 @@ class BriefingService(
 		}
 	}
 
-	private fun <T> fetch(source: String, call: () -> T): T? =
-		try {
-			call()
-		} catch (e: IeumException) {
-			log.warn("Briefing count lookup failed. source={}", source, e)
-			null
+	// 배포 직후 첫 호출은 연결과 초기화로 deadline 을 넘기기 쉬워서 한 번 더 묻는다. 읽기 전용이라 다시 물어도 안전하다.
+	private fun <T> fetch(source: String, call: () -> T): T? {
+		repeat(2) { attempt ->
+			try {
+				return call()
+			} catch (e: IeumException) {
+				log.warn("Briefing count lookup failed. source={}, attempt={}", source, attempt + 1, e)
+			}
 		}
+		return null
+	}
 }

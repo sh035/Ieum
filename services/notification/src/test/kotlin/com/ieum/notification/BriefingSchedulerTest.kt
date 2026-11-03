@@ -137,6 +137,16 @@ class BriefingSchedulerTest @Autowired constructor(
 	}
 
 	@Test
+	fun `조회가 한 번 실패해도 다시 물어 받은 개수로 보낸다`() {
+		token(dad)
+		`when`(groceryClient.getExpiringCounts(today)).thenThrow(unavailable).thenReturn(mapOf(mom to 2))
+
+		briefingScheduler.run()
+
+		assertEquals(mapOf(mom to briefing("유통기한 2"), dad to briefing("오늘은 챙길 일이 없어요. 여유로운 하루 보내세요")), briefings())
+	}
+
+	@Test
 	fun `한 계정 저장이 실패해도 나머지 계정은 받는다`() {
 		`when`(groceryClient.getExpiringCounts(today)).thenReturn(mapOf(mom to 1, dad to 2))
 		doThrow(IllegalStateException("boom")).`when`(notificationService).saveAndDeliver(
