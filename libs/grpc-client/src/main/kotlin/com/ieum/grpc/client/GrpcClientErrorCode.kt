@@ -9,4 +9,6 @@ enum class GrpcClientErrorCode(
 ) : ErrorCode {
 	FAMILY_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Family service unavailable."),
 	ACCOUNT_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Account service unavailable."),
+	PLANNER_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Planner service unavailable."),
+	GROCERY_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Grocery service unavailable."),
 }

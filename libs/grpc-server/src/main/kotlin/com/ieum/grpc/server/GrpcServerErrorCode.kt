@@ -8,4 +8,5 @@ enum class GrpcServerErrorCode(
 	override val message: String,
 ) : ErrorCode {
 	INVALID_UUID(HttpStatus.BAD_REQUEST, "Invalid uuid."),
+	INVALID_DATE(HttpStatus.BAD_REQUEST, "Invalid date."),
 }
