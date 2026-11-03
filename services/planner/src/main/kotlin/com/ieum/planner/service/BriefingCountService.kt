@@ -34,7 +34,7 @@ class BriefingCountService(
 		val schedules = scheduleRepository.findAllByStartAtLessThanAndEndAtGreaterThanEqualAndIsDeletedFalse(
 			date.plusDays(1).atStartOfDay(),
 			date.atStartOfDay(),
-		)
+		).filterNot { it.endsBefore(date.atStartOfDay()) }
 		if (schedules.isNotEmpty()) {
 			scheduleAttendeeRepository.findAllByScheduleIdInAndIsDeletedFalse(schedules.map { requireNotNull(it.scheduleId) })
 				.forEach { attendee -> add(attendee.accountId) { it.copy(schedule = it.schedule + 1) } }

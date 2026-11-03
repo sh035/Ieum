@@ -142,6 +142,14 @@ class PlannerInternalGrpcControllerTest @Autowired constructor(
 	}
 
 	@Test
+	fun `자정에 끝나는 시각 일정은 오늘 일정으로 세지 않는다`() {
+		schedule(today.minusDays(1).atTime(22, 0), today.atStartOfDay(), attendees = listOf(dad))
+		schedule(today.atStartOfDay(), today.atStartOfDay(), attendees = listOf(kid))
+
+		assertEquals(mapOf(kid.toString() to counts(schedule = 1)), countsOn("2026-10-30"))
+	}
+
+	@Test
 	fun `챙길 게 없으면 빈 응답이다`() {
 		todo(creator = mom, assignee = dad, dueDate = today.plusDays(1))
 
