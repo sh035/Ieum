@@ -22,6 +22,11 @@ spring:
       properties:
         # Kafka 장애 시 리스너가 오래 막히지 않게 발행 대기를 2초로 끊는다.
         max.block.ms: 2000
+  task:
+    scheduling:
+      pool:
+        # 브리핑 발송이 길어져도 SSE heartbeat 가 밀리지 않게 스레드를 하나 더 둔다.
+        size: 2
   grpc:
     client:
       channel:
@@ -29,6 +34,10 @@ spring:
           target: ${ACCOUNT_GRPC_TARGET}
         family:
           target: ${FAMILY_GRPC_TARGET}
+        planner:
+          target: ${PLANNER_GRPC_TARGET}
+        grocery:
+          target: ${GROCERY_GRPC_TARGET}
 
 server:
   port: 8086
@@ -39,6 +48,8 @@ jwt:
 notification:
   delivery:
     auto-offset-reset: latest
+  scheduler:
+    briefing-cron: "0 0 9 * * *"
 
 firebase:
   credentials: ${FIREBASE_CREDENTIALS:}

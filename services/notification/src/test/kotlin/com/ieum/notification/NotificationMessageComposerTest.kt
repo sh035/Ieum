@@ -14,6 +14,7 @@ import com.ieum.events.NotificationEventType.SCHEDULE_UPDATED
 import com.ieum.events.NotificationEventType.TODO_ASSIGNED
 import com.ieum.events.NotificationEventType.TODO_COMPLETED
 import com.ieum.events.NotificationEventType.TODO_DUE_SOON
+import com.ieum.notification.domain.enums.BriefingItem
 import com.ieum.notification.service.NotificationMessage
 import com.ieum.notification.service.NotificationMessageComposer
 import org.junit.jupiter.api.Test
@@ -127,5 +128,29 @@ class NotificationMessageComposerTest {
 		assertFailsWith<IllegalArgumentException> { compose(SCHEDULE_UPDATED, data(at = evening)) }
 		assertFailsWith<IllegalArgumentException> { compose(EXPENSE_PAYER_ASSIGNED, data("장보기")) }
 		assertFailsWith<IllegalArgumentException> { compose(BUDGET_EXCEEDED, data()) }
+	}
+
+	@Test
+	fun `브리핑은 정해진 순서로 개수를 나열하고 0 인 항목은 뺀다`() {
+		assertEquals(
+			NotificationMessage("오늘의 데일리 브리핑", "할 일 3 · 밀린 할 일 1 · 일정 2 · 유통기한 2"),
+			composer.briefing(
+				mapOf(BriefingItem.EXPIRING to 2, BriefingItem.SCHEDULE to 2, BriefingItem.OVERDUE_TODO to 1, BriefingItem.TODO to 3),
+			),
+		)
+		assertEquals(
+			NotificationMessage("오늘의 데일리 브리핑", "밀린 할 일 1 · 유통기한 4"),
+			composer.briefing(mapOf(BriefingItem.EXPIRING to 4, BriefingItem.TODO to 0, BriefingItem.OVERDUE_TODO to 1)),
+		)
+	}
+
+	@Test
+	fun `챙길 게 없는 날도 브리핑을 보낸다`() {
+		assertEquals(NotificationMessage("오늘의 데일리 브리핑", "오늘은 챙길 일이 없어요. 여유로운 하루 보내세요"), composer.briefing(emptyMap()))
+	}
+
+	@Test
+	fun `브리핑은 단건 이벤트로 문구를 만들지 않는다`() {
+		assertFailsWith<IllegalArgumentException> { composer.compose(NotificationEventType.DAILY_BRIEFING, data(), null, null) }
 	}
 }

@@ -2,6 +2,7 @@ package com.ieum.notification.service
 
 import com.ieum.events.NotificationEventData
 import com.ieum.events.NotificationEventType
+import com.ieum.notification.domain.enums.BriefingItem
 import org.springframework.stereotype.Component
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -38,7 +39,26 @@ class NotificationMessageComposer {
 				NotificationMessage("${data.at?.let { "${it.monthValue}월" } ?: "이번 달"} 예산을 넘었어요", "$amount 초과")
 			NotificationEventType.TODO_DUE_SOON -> NotificationMessage("3시간 뒤 마감이에요", subject)
 			NotificationEventType.SCHEDULE_STARTING_SOON -> NotificationMessage("3시간 뒤 일정이 있어요", subject)
+			// 브리핑은 이벤트 하나가 아니라 계정별로 합친 개수로 만든다.
+			NotificationEventType.DAILY_BRIEFING ->
+				throw IllegalArgumentException("Briefing is not composed from a single event. type=$type")
 		}
+	}
+
+	// 개수만 쓰고 물품 이름은 뺀다. 0 인 항목은 빼고, 다 비면 쉬어 가는 날이라고 쓴다.
+	fun briefing(counts: Map<BriefingItem, Int>): NotificationMessage {
+		val body = BriefingItem.entries
+			.mapNotNull { item -> counts[item]?.takeIf { it > 0 }?.let { "${item.label()} $it" } }
+			.joinToString(" · ")
+			.ifEmpty { EMPTY_BRIEFING }
+		return NotificationMessage(BRIEFING_TITLE, body)
+	}
+
+	private fun BriefingItem.label() = when (this) {
+		BriefingItem.TODO -> "할 일"
+		BriefingItem.OVERDUE_TODO -> "밀린 할 일"
+		BriefingItem.SCHEDULE -> "일정"
+		BriefingItem.EXPIRING -> "유통기한"
 	}
 
 	private fun dated(at: LocalDateTime?, subject: String) = listOfNotNull(at?.format(DATE), subject).joinToString(" ")
@@ -56,6 +76,8 @@ class NotificationMessageComposer {
 		private const val UNKNOWN = "가족"
 		private const val MANAGER = "MANAGER"
 		private const val MAX_SUBJECT_LENGTH = 50
+		private const val BRIEFING_TITLE = "오늘의 데일리 브리핑"
+		private const val EMPTY_BRIEFING = "오늘은 챙길 일이 없어요. 여유로운 하루 보내세요"
 		private val DATE = DateTimeFormatter.ofPattern("M/d(E)", Locale.KOREAN)
 		private val TIME = DateTimeFormatter.ofPattern("HH:mm")
 	}

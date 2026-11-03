@@ -13,4 +13,5 @@ enum class NotificationEventType {
 	BUDGET_EXCEEDED,
 	TODO_DUE_SOON,
 	SCHEDULE_STARTING_SOON,
+	DAILY_BRIEFING,
 }

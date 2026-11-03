@@ -3,6 +3,7 @@ package com.ieum.notification.service
 import com.ieum.events.IeumEvent
 import com.ieum.events.NotificationEventData
 import com.ieum.events.NotificationEventType
+import com.ieum.events.NotificationTargetType
 import com.ieum.grpc.client.account.AccountClient
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.notification.domain.entity.Notification
@@ -13,6 +14,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import java.sql.SQLException
+import java.util.UUID
 
 @Service
 class NotificationService(
@@ -42,29 +44,41 @@ class NotificationService(
 		val message = composer.compose(type, data, nickname, familyName)
 
 		recipients.forEach { accountId ->
-			val saved = try {
-				notificationRepository.saveAndFlush(
-					Notification(
-						accountId = accountId,
-						familyId = data.familyId,
-						type = type,
-						title = message.title,
-						body = message.body,
-						targetType = data.targetType,
-						targetId = data.targetId,
-						dedupKey = dedupKey,
-					),
-				)
-			} catch (e: DataIntegrityViolationException) {
-				// 동시에 같은 알림이 들어온 경우만 건너뛴다. 길이 초과 같은 다른 위반은 재시도 후 DLT 로 보낸다.
-				if ((e.mostSpecificCause as? SQLException)?.sqlState != UNIQUE_VIOLATION) {
-					throw e
-				}
-				log.debug("Duplicate notification skipped. accountId={}, dedupKey={}", accountId, dedupKey)
-				return@forEach
-			}
-			deliver(saved)
+			saveAndDeliver(accountId, type, message, dedupKey, data.familyId, data.targetType, data.targetId)
 		}
+	}
+
+	// 동시에 같은 알림이 들어온 경우만 건너뛰고, 길이 초과 같은 다른 위반은 호출한 쪽으로 던진다.
+	fun saveAndDeliver(
+		accountId: UUID,
+		type: NotificationEventType,
+		message: NotificationMessage,
+		dedupKey: String,
+		familyId: UUID? = null,
+		targetType: NotificationTargetType? = null,
+		targetId: UUID? = null,
+	) {
+		val saved = try {
+			notificationRepository.saveAndFlush(
+				Notification(
+					accountId = accountId,
+					familyId = familyId,
+					type = type,
+					title = message.title,
+					body = message.body,
+					targetType = targetType,
+					targetId = targetId,
+					dedupKey = dedupKey,
+				),
+			)
+		} catch (e: DataIntegrityViolationException) {
+			if ((e.mostSpecificCause as? SQLException)?.sqlState != UNIQUE_VIOLATION) {
+				throw e
+			}
+			log.debug("Duplicate notification skipped. accountId={}, dedupKey={}", accountId, dedupKey)
+			return
+		}
+		deliver(saved)
 	}
 
 	// 전달 실패는 저장된 알림을 되돌릴 이유가 아니라서, sender 마다 따로 잡고 다음으로 넘어간다.

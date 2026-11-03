@@ -286,3 +286,19 @@ CREATE TABLE notification.device_token
 
 CREATE UNIQUE INDEX uk_device_token_token ON notification.device_token (token) WHERE is_deleted = false;
 CREATE INDEX idx_device_token_account_id ON notification.device_token (account_id);
+
+-- ShedLock 이 관리하는 스케줄 작업 락. 라이브러리 표준 형식이라 공통 컬럼 규칙을 따르지 않는다.
+CREATE TABLE notification.shedlock
+(
+	name       varchar(64)  NOT NULL PRIMARY KEY,
+	lock_until timestamp(6) NOT NULL,
+	locked_at  timestamp(6) NOT NULL,
+	locked_by  varchar(255) NOT NULL
+);
+
+-- 스케줄 작업이 어디까지 처리했는지 기록한다. 다음 회차는 여기서 이어서 처리해 중복도 누락도 없다. 인프라 테이블이라 공통 컬럼 규칙을 따르지 않는다.
+CREATE TABLE notification.scheduler_checkpoint
+(
+	name            varchar(64)  NOT NULL PRIMARY KEY,
+	processed_until timestamp(6) NOT NULL
+);
