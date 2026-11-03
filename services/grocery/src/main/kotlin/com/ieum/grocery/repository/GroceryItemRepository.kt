@@ -3,6 +3,7 @@ package com.ieum.grocery.repository
 import com.ieum.grocery.domain.entity.GroceryItem
 import com.ieum.grocery.domain.enums.Visibility
 import org.springframework.data.jpa.repository.JpaRepository
+import java.time.LocalDate
 import java.util.UUID
 
 interface GroceryItemRepository : JpaRepository<GroceryItem, UUID> {
@@ -18,4 +19,7 @@ interface GroceryItemRepository : JpaRepository<GroceryItem, UUID> {
 	): List<GroceryItem>
 
 	fun existsByStorageIdAndIsDeletedFalse(storageId: UUID): Boolean
+
+	// 브리핑 후보다. 유통기한이 지난 것도 지울 때까지 포함한다.
+	fun findAllByExpiryDateLessThanEqualAndIsDeletedFalse(date: LocalDate): List<GroceryItem>
 }

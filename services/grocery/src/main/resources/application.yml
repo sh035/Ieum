@@ -22,5 +22,7 @@ spring:
 server:
   port: 8084
 
+spring.grpc.server.port: 9084
+
 jwt:
   public-key: ${JWT_PUBLIC_KEY}
