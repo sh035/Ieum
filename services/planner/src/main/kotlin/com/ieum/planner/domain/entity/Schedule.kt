@@ -43,4 +43,8 @@ class Schedule(
 	@UuidGenerator(style = UuidGenerator.Style.VERSION_7)
 	@Column(nullable = false, updatable = false)
 	val scheduleId: UUID? = null,
-) : BaseEntity()
+) : BaseEntity() {
+
+	// 구글 / 애플 캘린더처럼 시각 일정의 끝 시각은 포함하지 않는다. 자정에 끝나는 일정은 전날 일정이다.
+	fun endsBefore(rangeStart: LocalDateTime) = !isAllDay && startAt < rangeStart && endAt <= rangeStart
+}

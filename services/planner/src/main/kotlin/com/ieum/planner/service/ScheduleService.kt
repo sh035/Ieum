@@ -99,7 +99,7 @@ class ScheduleService(
 				rangeStart,
 			)
 
-		return toResponses((familySchedules + privateSchedules).sortedWith(compareBy({ it.startAt }, { it.createdAt })))
+		return toResponses((familySchedules + privateSchedules).filterNot { it.endsBefore(rangeStart) }.sortedWith(compareBy({ it.startAt }, { it.createdAt })))
 	}
 
 	@Transactional(readOnly = true)

@@ -145,6 +145,23 @@ class ScheduleControllerTest @Autowired constructor(
 	}
 
 	@Test
+	fun `자정에 끝나는 시각 일정은 전날 일정이다`() {
+		createId(familySchedule("자정에 끝나는 회식", startAt = "2026-11-09T22:00:00", endAt = "2026-11-10T00:00:00"))
+		createId(familySchedule("자정 알람", startAt = "2026-11-10T00:00:00", endAt = "2026-11-10T00:00:00"))
+		create(
+			"""{"familyId":"$familyId","visibility":"FAMILY","title":"전날까지 여행","isAllDay":true,"startAt":"2026-11-08T00:00:00","endAt":"2026-11-09T00:00:00","attendeeAccountIds":["$me"]}""",
+		).andExpect { status { isCreated() } }
+
+		get("/api/v1/schedule?familyId=$familyId&from=2026-11-10&to=2026-11-10").andExpect {
+			jsonPath("\$.data.length()") { value(1) }
+			jsonPath("\$.data[0].title") { value("자정 알람") }
+		}
+		get("/api/v1/schedule?familyId=$familyId&from=2026-11-09&to=2026-11-09").andExpect {
+			jsonPath("\$.data.length()") { value(2) }
+		}
+	}
+
+	@Test
 	fun `기간이 잘못되면 400`() {
 		get("/api/v1/schedule?from=2026-11-10&to=2026-11-09").andExpect { status { isBadRequest() } }
 		get("/api/v1/schedule?to=2026-11-09").andExpect { status { isBadRequest() } }

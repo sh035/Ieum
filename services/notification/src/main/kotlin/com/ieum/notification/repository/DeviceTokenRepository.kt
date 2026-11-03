@@ -9,4 +9,6 @@ interface DeviceTokenRepository : JpaRepository<DeviceToken, UUID> {
 	fun findByTokenAndIsDeletedFalse(token: String): DeviceToken?
 
 	fun findAllByAccountIdAndIsDeletedFalse(accountId: UUID): List<DeviceToken>
+
+	fun findAllByIsDeletedFalse(): List<DeviceToken>
 }

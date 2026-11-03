@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package ieum.planner.v1;
+
+option java_multiple_files = true;
+option java_package = "com.ieum.proto.planner.v1";
+
+// 서비스 간 호출 전용. Gateway 에 노출하지 않는다.
+service PlannerInternalService {
+  // 그날 브리핑에 들어갈 계정별 개수. 셋 다 0 인 계정은 담지 않는다.
+  rpc GetBriefingCounts(GetBriefingCountsRequest) returns (GetBriefingCountsResponse);
+}
+
+message GetBriefingCountsRequest {
+  // yyyy-MM-dd
+  string date = 1;
+}
+
+message GetBriefingCountsResponse {
+  // key 는 account_id
+  map<string, BriefingCounts> counts = 1;
+}
+
+message BriefingCounts {
+  int32 todo = 1;
+  int32 overdue_todo = 2;
+  int32 schedule = 3;
+}

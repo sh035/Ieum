@@ -6,6 +6,7 @@ dependencies {
 	implementation(project(":libs:web"))
 	implementation(project(":libs:security"))
 	implementation(project(":libs:grpc-client"))
+	implementation(project(":libs:grpc-server"))
 	implementation(project(":libs:events"))
 	implementation(project(":libs:scheduler"))
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -15,6 +16,8 @@ dependencies {
 	runtimeOnly("org.postgresql:postgresql")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+	testImplementation("org.springframework.boot:spring-boot-starter-grpc-server-test")
+	testImplementation("org.springframework.boot:spring-boot-starter-grpc-client-test")
 	testImplementation("org.springframework.boot:spring-boot-testcontainers")
 	testImplementation("org.testcontainers:testcontainers-postgresql")
 	testImplementation("org.testcontainers:testcontainers-junit-jupiter")
