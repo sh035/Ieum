@@ -11,6 +11,7 @@ import com.ieum.family.domain.entity.FamilyMember
 import com.ieum.family.domain.enums.FamilyRole
 import com.ieum.family.exception.FamilyErrorCode
 import com.ieum.family.repository.FamilyMemberRepository
+import com.ieum.family.repository.FamilyRepository
 import com.ieum.web.exception.IeumException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -18,6 +19,7 @@ import java.util.UUID
 
 @Service
 class FamilyMemberService(
+	private val familyRepository: FamilyRepository,
 	private val familyMemberRepository: FamilyMemberRepository,
 	private val notificationEventPublisher: NotificationEventPublisher,
 ) {
@@ -128,7 +130,9 @@ class FamilyMemberService(
 		familyMemberRepository.findAllByFamilyIdAndAccountIdInAndIsDeletedFalse(familyId, accountIds)
 			.associate { it.accountId to it.role }
 
+	// 가족을 먼저 잠가서 동시에 온 요청은 앞 요청이 끝난 뒤의 역할로 다시 확인한다.
 	private fun findOwner(accountId: String, familyId: UUID): FamilyMember {
+		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
 		val requester = familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, UUID.fromString(accountId))
 			?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
 		if (requester.role != FamilyRole.OWNER) {

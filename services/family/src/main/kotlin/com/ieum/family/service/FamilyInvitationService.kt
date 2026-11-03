@@ -89,6 +89,8 @@ class FamilyInvitationService(
 		val me = UUID.fromString(accountId)
 		val family = findInvitedFamily(code)
 		val familyId = requireNotNull(family.familyId)
+		// 혼자 남은 OWNER 가 동시에 나가 가족이 삭제되면 여기서 걸러낸다.
+		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.INVITATION_NOT_FOUND)
 
 		if (familyMemberRepository.existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, me)) {
 			throw IeumException(FamilyErrorCode.ALREADY_FAMILY_MEMBER)

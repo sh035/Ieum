@@ -19,6 +19,9 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.patch
 import org.springframework.test.web.servlet.post
 import java.time.LocalDateTime
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -250,5 +253,28 @@ class FamilyMemberControllerTest @Autowired constructor(
 		transferOwnership(familyId, UUID.randomUUID()).andExpect { status { isNotFound() } }
 
 		assertEquals(FamilyRole.OWNER, roleOf(familyId, ownerId))
+	}
+
+	@Test
+	fun `소유권 넘기기가 동시에 두 번 오면 먼저 처리된 것만 반영된다`() {
+		val familyId = createFamily()
+		val otherId = UUID.randomUUID()
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = otherId, role = FamilyRole.MEMBER))
+		val targets = listOf(memberIdOf(familyId, memberId), memberIdOf(familyId, otherId))
+		val start = CountDownLatch(1)
+		val executor = Executors.newFixedThreadPool(targets.size)
+
+		val results = targets.map { target ->
+			executor.submit<Int> {
+				start.await()
+				transferOwnership(familyId, target).andReturn().response.status
+			}
+		}
+		start.countDown()
+		val statuses = results.map { it.get(10, TimeUnit.SECONDS) }.sorted()
+		executor.shutdown()
+
+		assertEquals(listOf(204, 403), statuses)
+		assertEquals(1, familyMemberRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId).count { it.role == FamilyRole.OWNER })
 	}
 }

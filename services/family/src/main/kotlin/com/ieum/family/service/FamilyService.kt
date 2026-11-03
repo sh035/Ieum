@@ -63,6 +63,8 @@ class FamilyService(
 	@Transactional
 	fun leave(accountId: String, familyId: UUID) {
 		val me = UUID.fromString(accountId)
+		val family = familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId)
+			?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
 		val members = familyMemberRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId)
 		val mine = members.find { it.accountId == me } ?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
 		val others = members - mine
@@ -72,7 +74,7 @@ class FamilyService(
 
 		mine.delete()
 		if (others.isEmpty()) {
-			familyRepository.findByFamilyIdAndIsDeletedFalse(familyId)?.delete()
+			family.delete()
 			familyInvitationRepository.findByFamilyIdAndIsDeletedFalse(familyId)?.delete()
 			log.debug("Family deleted. familyId={}, accountId={}", familyId, accountId)
 			return
