@@ -39,7 +39,7 @@ class NotificationService(
 
 		val nickname = data.actorAccountId?.let { actor -> lookup { accountClient.getNicknames(setOf(actor))[actor] } }
 		val familyName = data.familyId
-			?.takeIf { type == NotificationEventType.FAMILY_SCHEDULE_CREATED }
+			?.takeIf { type in FAMILY_NAME_TYPES }
 			?.let { familyId -> lookup { familyClient.getFamily(familyId)?.name } }
 		val message = composer.compose(type, data, nickname, familyName)
 
@@ -103,5 +103,12 @@ class NotificationService(
 
 	companion object {
 		private const val UNIQUE_VIOLATION = "23505"
+
+		// 문구에 가족 이름을 넣는 알림만 family 를 조회한다.
+		private val FAMILY_NAME_TYPES = setOf(
+			NotificationEventType.FAMILY_SCHEDULE_CREATED,
+			NotificationEventType.FAMILY_MEMBER_REMOVED,
+			NotificationEventType.FAMILY_OWNERSHIP_TRANSFERRED,
+		)
 	}
 }

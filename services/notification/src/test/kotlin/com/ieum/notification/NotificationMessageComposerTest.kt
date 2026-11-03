@@ -5,6 +5,9 @@ import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationEventType.BUDGET_EXCEEDED
 import com.ieum.events.NotificationEventType.EXPENSE_PAYER_ASSIGNED
 import com.ieum.events.NotificationEventType.FAMILY_MEMBER_JOINED
+import com.ieum.events.NotificationEventType.FAMILY_MEMBER_LEFT
+import com.ieum.events.NotificationEventType.FAMILY_MEMBER_REMOVED
+import com.ieum.events.NotificationEventType.FAMILY_OWNERSHIP_TRANSFERRED
 import com.ieum.events.NotificationEventType.FAMILY_ROLE_CHANGED
 import com.ieum.events.NotificationEventType.FAMILY_SCHEDULE_CREATED
 import com.ieum.events.NotificationEventType.SCHEDULE_ATTENDEE_ADDED
@@ -91,6 +94,19 @@ class NotificationMessageComposerTest {
 		assertEquals(
 			NotificationMessage("10월 예산을 넘었어요", "30,000원 초과"),
 			compose(BUDGET_EXCEEDED, data(amount = 30000, at = LocalDateTime.of(2026, 10, 1, 0, 0))),
+		)
+	}
+
+	@Test
+	fun `가족을 떠나거나 맡기는 알림 문구`() {
+		assertEquals(NotificationMessage("엄마님이 가출했어요", "다시 초대하면 언제든 돌아올 수 있어요"), compose(FAMILY_MEMBER_LEFT, data()))
+		assertEquals(
+			NotificationMessage("[우리집]에서 나오게 됐어요", "엄마님이 짐을 싸 줬어요"),
+			compose(FAMILY_MEMBER_REMOVED, data(), familyName = "우리집"),
+		)
+		assertEquals(
+			NotificationMessage("엄마님이 집을 맡겼어요", "[우리집] 이제 우리 집을 부탁해요"),
+			compose(FAMILY_OWNERSHIP_TRANSFERRED, data(), familyName = "우리집"),
 		)
 	}
 

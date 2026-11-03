@@ -32,6 +32,10 @@ class NotificationMessageComposer {
 				if (data.role == MANAGER) "살림을 함께 꾸리게 됐어요" else "살림 함께 꾸리기가 꺼졌어요",
 				"${nickname}님이 바꿨어요",
 			)
+			NotificationEventType.FAMILY_MEMBER_LEFT -> NotificationMessage("${nickname}님이 가출했어요", "다시 초대하면 언제든 돌아올 수 있어요")
+			NotificationEventType.FAMILY_MEMBER_REMOVED -> NotificationMessage("[${familyName ?: UNKNOWN}]에서 나오게 됐어요", "${nickname}님이 짐을 싸 줬어요")
+			NotificationEventType.FAMILY_OWNERSHIP_TRANSFERRED ->
+				NotificationMessage("${nickname}님이 집을 맡겼어요", "[${familyName ?: UNKNOWN}] 이제 우리 집을 부탁해요")
 			NotificationEventType.EXPENSE_PAYER_ASSIGNED ->
 				NotificationMessage("${nickname}님이 지출을 등록했어요", "$subject · $amount")
 			// 지난달 영수증을 늦게 넣을 수 있어서 판정한 달을 쓴다.
