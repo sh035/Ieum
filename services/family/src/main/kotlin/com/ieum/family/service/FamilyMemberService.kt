@@ -43,11 +43,7 @@ class FamilyMemberService(
 		familyMemberId: UUID,
 		request: UpdateFamilyMemberRoleRequest,
 	): FamilyMemberResponse {
-		val requester = familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, UUID.fromString(accountId))
-			?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
-		if (requester.role != FamilyRole.OWNER) {
-			throw IeumException(FamilyErrorCode.FAMILY_ACCESS_DENIED)
-		}
+		val requester = findOwner(accountId, familyId)
 
 		val member = familyMemberRepository.findByFamilyMemberIdAndFamilyIdAndIsDeletedFalse(familyMemberId, familyId)
 			?: throw IeumException(FamilyErrorCode.FAMILY_MEMBER_NOT_FOUND)
@@ -93,7 +89,7 @@ class FamilyMemberService(
 		)
 	}
 
-	// 넘긴 OWNER 는 MEMBER 가 된다.
+	// OWNER 가 나가려면 앱이 이 API 로 넘긴 뒤 나가기를 부른다.
 	@Transactional
 	fun transferOwnership(accountId: String, familyId: UUID, familyMemberId: UUID) {
 		val owner = findOwner(accountId, familyId)

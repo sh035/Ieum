@@ -126,6 +126,7 @@ class FamilyNotificationEventTest @Autowired constructor(
 		val familyId = createFamily()
 
 		mockMvc.post("/api/v1/family/$familyId/leave") { header("Authorization", "Bearer ${accessToken(owner)}") }
+			.andExpect { status { isNoContent() } }
 
 		assertEquals(emptyList(), published())
 	}
