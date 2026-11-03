@@ -1,5 +1,7 @@
 package com.ieum.family.service
 
+import com.ieum.events.FamilyEventData
+import com.ieum.events.FamilyEventType
 import com.ieum.events.NotificationEventData
 import com.ieum.events.NotificationEventPublisher
 import com.ieum.events.NotificationEventType
@@ -26,6 +28,7 @@ class FamilyService(
 	private val familyMemberRepository: FamilyMemberRepository,
 	private val familyInvitationRepository: FamilyInvitationRepository,
 	private val notificationEventPublisher: NotificationEventPublisher,
+	private val familyEventPublisher: FamilyEventPublisher,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
@@ -76,10 +79,12 @@ class FamilyService(
 		if (others.isEmpty()) {
 			family.delete()
 			familyInvitationRepository.findByFamilyIdAndIsDeletedFalse(familyId)?.delete()
+			familyEventPublisher.publish(FamilyEventType.FAMILY_DELETED, FamilyEventData(familyId = familyId))
 			log.debug("Family deleted. familyId={}, accountId={}", familyId, accountId)
 			return
 		}
 
+		familyEventPublisher.publish(FamilyEventType.FAMILY_MEMBER_LEFT, FamilyEventData(familyId = familyId, accountId = me))
 		notificationEventPublisher.publish(
 			NotificationEventType.FAMILY_MEMBER_LEFT,
 			NotificationEventData(
