@@ -107,6 +107,8 @@ class NotificationService(
 		// 문구에 가족 이름을 넣는 알림만 family 를 조회한다.
 		private val FAMILY_NAME_TYPES = setOf(
 			NotificationEventType.FAMILY_SCHEDULE_CREATED,
+			NotificationEventType.FAMILY_INVITED,
+			NotificationEventType.FAMILY_INVITATION_DECLINED,
 			NotificationEventType.FAMILY_MEMBER_REMOVED,
 			NotificationEventType.FAMILY_OWNERSHIP_TRANSFERRED,
 		)

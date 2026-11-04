@@ -16,7 +16,10 @@ class FamilyInvitation(
 	val familyId: UUID,
 
 	@Column(nullable = false, updatable = false)
-	val code: String,
+	val inviterAccountId: UUID,
+
+	@Column(nullable = false, updatable = false)
+	val inviteeAccountId: UUID,
 
 	@Column(nullable = false, updatable = false)
 	val expiresAt: LocalDateTime,

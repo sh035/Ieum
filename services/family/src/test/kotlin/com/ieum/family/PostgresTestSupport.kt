@@ -1,6 +1,7 @@
 package com.ieum.family
 
 import com.ieum.events.NotificationEventRelay
+import com.ieum.grpc.client.account.AccountClient
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.security.oauth2.jwt.JwtClaimsSet
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters
@@ -22,6 +23,10 @@ abstract class PostgresTestSupport {
 	// 이벤트는 @RecordApplicationEvents 로 확인하고 Kafka 로는 보내지 않는다.
 	@MockitoBean
 	lateinit var notificationEventRelay: NotificationEventRelay
+
+	// 초대 대상 조회는 account 를 부르므로 테스트마다 필요한 응답만 정한다.
+	@MockitoBean
+	lateinit var accountClient: AccountClient
 
 	companion object {
 		// 테스트 클래스마다 컨테이너를 내리면 캐시된 Spring 컨텍스트가 죽은 포트를 바라보므로 JVM 동안 하나만 띄운다.
@@ -49,6 +54,7 @@ abstract class PostgresTestSupport {
 		fun jwtKeys(registry: DynamicPropertyRegistry) {
 			registry.add("jwt.public-key") { Base64.getEncoder().encodeToString(keyPair.public.encoded) }
 			registry.add("spring.kafka.bootstrap-servers") { "localhost:9092" }
+			registry.add("spring.grpc.client.channel.account.target") { "localhost:9081" }
 			registry.add("family.scheduler.outbox-relay-cron") { "-" }
 			registry.add("family.scheduler.outbox-cleanup-cron") { "-" }
 		}

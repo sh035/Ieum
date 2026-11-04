@@ -46,21 +46,29 @@ CREATE UNIQUE INDEX uk_family_member_family_id_account_id
 -- 내 가족 목록 조회용
 CREATE INDEX idx_family_member_account_id ON family.family_member (account_id);
 
+-- 특정 계정에게 보낸 가족 초대
+-- - OWNER 가 이메일로 찾은 계정에게만 보내고, 그 계정만 수락하거나 거절할 수 있다
+-- - 만든 뒤 1시간 동안 유효하다
+-- - 수락 / 거절 / 취소하면 is_deleted 로 끝낸다. 만료된 초대는 같은 사람을 다시 초대할 때 정리한다
 CREATE TABLE family.family_invitation
 (
 	family_invitation_id uuid PRIMARY KEY,
 	family_id            uuid         NOT NULL REFERENCES family.family (family_id),
-	code                 varchar(8)   NOT NULL UNIQUE,
+	inviter_account_id   uuid         NOT NULL,
+	invitee_account_id   uuid         NOT NULL,
 	expires_at           timestamp(6) NOT NULL,
 	created_at           timestamp(6) NOT NULL,
 	updated_at           timestamp(6),
 	is_deleted           boolean      NOT NULL DEFAULT false
 );
 
--- 가족마다 유효한 초대 코드는 하나만 둔다.
-CREATE UNIQUE INDEX uk_family_invitation_family_id
-	ON family.family_invitation (family_id)
+-- 같은 가족이 같은 사람에게 보낸 살아 있는 초대는 하나만 둔다.
+CREATE UNIQUE INDEX uk_family_invitation_family_id_invitee_account_id
+	ON family.family_invitation (family_id, invitee_account_id)
 	WHERE is_deleted = false;
+
+-- 받은 초대 목록 조회용
+CREATE INDEX idx_family_invitation_invitee_account_id ON family.family_invitation (invitee_account_id);
 
 -- 다른 서비스로 보낼 가족 이벤트 (Transactional Outbox)
 -- - 나가기 / 내보내기 / 가족 삭제와 같은 트랜잭션에 저장해 커밋된 변경만 보낸다

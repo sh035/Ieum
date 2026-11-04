@@ -78,7 +78,7 @@ class FamilyService(
 		mine.delete()
 		if (others.isEmpty()) {
 			family.delete()
-			familyInvitationRepository.findByFamilyIdAndIsDeletedFalse(familyId)?.delete()
+			familyInvitationRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId).forEach { it.delete() }
 			familyEventPublisher.publish(FamilyEventType.FAMILY_DELETED, FamilyEventData(familyId = familyId))
 			log.debug("Family deleted. familyId={}, accountId={}", familyId, accountId)
 			return

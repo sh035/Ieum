@@ -7,6 +7,7 @@ dependencies {
 	implementation(project(":libs:security"))
 	implementation(project(":libs:proto"))
 	implementation(project(":libs:grpc-server"))
+	implementation(project(":libs:grpc-client"))
 	implementation(project(":libs:events"))
 	implementation(project(":libs:scheduler"))
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")

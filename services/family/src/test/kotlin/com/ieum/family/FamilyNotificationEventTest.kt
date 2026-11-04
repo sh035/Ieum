@@ -12,6 +12,7 @@ import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.`when`
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -77,16 +78,54 @@ class FamilyNotificationEventTest @Autowired constructor(
 	fun `초대를 수락하면 기존 구성원에게 알린다`() {
 		val familyId = createFamily()
 		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = member, role = FamilyRole.MEMBER))
-		val response = mockMvc.post("/api/v1/family/$familyId/invitation") {
-			header("Authorization", "Bearer ${accessToken(owner)}")
-		}.andReturn().response.contentAsString
-		val code = objectMapper.readTree(response).get("data").get("code").asString()
+		val invitationId = invite(familyId)
 
-		mockMvc.post("/api/v1/family-invitation/$code/accept") { header("Authorization", "Bearer ${accessToken(newbie)}") }
+		mockMvc.post("/api/v1/family-invitation/$invitationId/accept") { header("Authorization", "Bearer ${accessToken(newbie)}") }
 
-		assertEquals(listOf(familyEvent(NotificationEventType.FAMILY_MEMBER_JOINED, listOf(owner, member), familyId, newbie)), published())
+		assertEquals(
+			listOf(
+				invitedEvent(familyId, invitationId),
+				familyEvent(NotificationEventType.FAMILY_MEMBER_JOINED, listOf(owner, member), familyId, newbie),
+			),
+			published(),
+		)
 		// 커밋 뒤에만 Kafka 로 옮기는 리스너까지 이어지는지 본다.
 		verify(notificationEventRelay).relay(familyEvent(NotificationEventType.FAMILY_MEMBER_JOINED, listOf(owner, member), familyId, newbie))
+	}
+
+	private fun invite(familyId: UUID): UUID {
+		`when`(accountClient.getNicknames(setOf(newbie))).thenReturn(mapOf(newbie to "막내"))
+		val response = mockMvc.post("/api/v1/family/$familyId/invitation") {
+			header("Authorization", "Bearer ${accessToken(owner)}")
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"inviteeAccountId":"$newbie"}"""
+		}.andReturn().response.contentAsString
+		return UUID.fromString(objectMapper.readTree(response).get("data").get("familyInvitationId").asString())
+	}
+
+	private fun invitedEvent(familyId: UUID, invitationId: UUID) = NotificationEvent(
+		NotificationEventType.FAMILY_INVITED,
+		NotificationEventData(
+			recipientAccountIds = listOf(newbie),
+			familyId = familyId,
+			targetType = NotificationTargetType.FAMILY_INVITATION,
+			targetId = invitationId,
+			actorAccountId = owner,
+		),
+	)
+
+	@Test
+	fun `초대하면 받는 사람에게 알리고 거절하면 초대한 사람에게 알린다`() {
+		val familyId = createFamily()
+		val invitationId = invite(familyId)
+
+		mockMvc.post("/api/v1/family-invitation/$invitationId/decline") { header("Authorization", "Bearer ${accessToken(newbie)}") }
+			.andExpect { status { isNoContent() } }
+
+		assertEquals(
+			listOf(invitedEvent(familyId, invitationId), familyEvent(NotificationEventType.FAMILY_INVITATION_DECLINED, listOf(owner), familyId, newbie)),
+			published(),
+		)
 	}
 
 	private fun changeRole(familyId: UUID, familyMemberId: UUID?, role: String) =

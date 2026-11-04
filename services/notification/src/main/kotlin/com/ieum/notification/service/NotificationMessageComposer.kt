@@ -27,6 +27,10 @@ class NotificationMessageComposer {
 			NotificationEventType.FAMILY_SCHEDULE_CREATED -> NotificationMessage("[${familyName ?: UNKNOWN}] 가족 일정", dated(data.at, subject))
 			NotificationEventType.SCHEDULE_UPDATED -> NotificationMessage("일정이 바뀌었어요", dated(data.at, subject))
 			NotificationEventType.SCHEDULE_CANCELED -> NotificationMessage("일정이 취소됐어요", subject)
+			NotificationEventType.FAMILY_INVITED ->
+				NotificationMessage("${nickname}님이 가족으로 초대했어요", "[${familyName ?: UNKNOWN}] 1시간 안에 수락해 주세요")
+			NotificationEventType.FAMILY_INVITATION_DECLINED ->
+				NotificationMessage("${nickname}님이 초대를 거절했어요", "[${familyName ?: UNKNOWN}] 다음에 다시 초대해 보세요")
 			NotificationEventType.FAMILY_MEMBER_JOINED -> NotificationMessage("새 가족이 들어왔어요", "${nickname}님이 함께해요")
 			NotificationEventType.FAMILY_ROLE_CHANGED -> NotificationMessage(
 				if (data.role == MANAGER) "살림을 함께 꾸리게 됐어요" else "살림 함께 꾸리기가 꺼졌어요",

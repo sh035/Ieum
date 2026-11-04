@@ -6,7 +6,13 @@ import java.util.UUID
 
 interface FamilyInvitationRepository : JpaRepository<FamilyInvitation, UUID> {
 
-	fun findByFamilyIdAndIsDeletedFalse(familyId: UUID): FamilyInvitation?
+	fun findByFamilyInvitationIdAndIsDeletedFalse(familyInvitationId: UUID): FamilyInvitation?
 
-	fun findByCodeAndIsDeletedFalse(code: String): FamilyInvitation?
+	fun findByFamilyInvitationIdAndFamilyIdAndIsDeletedFalse(familyInvitationId: UUID, familyId: UUID): FamilyInvitation?
+
+	fun findByFamilyIdAndInviteeAccountIdAndIsDeletedFalse(familyId: UUID, inviteeAccountId: UUID): FamilyInvitation?
+
+	fun findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId: UUID): List<FamilyInvitation>
+
+	fun findAllByInviteeAccountIdAndIsDeletedFalseOrderByCreatedAt(inviteeAccountId: UUID): List<FamilyInvitation>
 }

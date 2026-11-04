@@ -26,6 +26,8 @@ spring:
 server:
   port: 8082
 
+spring.grpc.client.channel.account.target: ${ACCOUNT_GRPC_TARGET}
+
 # 서비스 간 호출을 받는 gRPC 포트. REST 포트와 짝을 맞춘다.
 spring.grpc.server.port: 9082
 
