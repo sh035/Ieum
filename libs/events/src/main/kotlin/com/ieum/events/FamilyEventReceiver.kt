@@ -9,6 +9,7 @@ import java.util.UUID
 
 // 가족 이벤트를 받는 서비스는 이 클래스를 상속해 떠남 / 삭제 처리만 구현한다.
 // family 의 outbox 는 같은 이벤트를 두 번 보낼 수 있어서 구현은 다시 처리해도 결과가 같아야 한다.
+// 서비스당 하나만 두고, 이벤트를 잃지 않게 familyEventErrorHandler 를 함께 빈으로 등록한다.
 abstract class FamilyEventReceiver(
 	private val objectMapper: ObjectMapper,
 ) {

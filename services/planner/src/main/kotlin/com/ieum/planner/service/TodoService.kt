@@ -258,7 +258,6 @@ class TodoService(
 		)
 	}
 
-
 	private fun checkDueTime(dueDate: LocalDate?, dueTime: LocalTime?) {
 		if (dueTime != null && dueDate == null) {
 			throw IeumException(PlannerErrorCode.DUE_TIME_WITHOUT_DATE)

@@ -82,7 +82,6 @@ class StorageService(
 		return storage
 	}
 
-
 	// 동시에 같은 이름을 만들면 앞선 확인을 함께 통과하므로 unique index 위반으로 걸러낸다.
 	private fun <T> saveCheckingDuplicate(save: () -> T): T =
 		try {

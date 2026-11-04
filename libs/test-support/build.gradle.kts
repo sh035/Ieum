@@ -12,6 +12,6 @@ dependencies {
 	api("org.springframework.boot:spring-boot-testcontainers")
 	api("org.testcontainers:testcontainers-postgresql")
 	api("org.testcontainers:testcontainers-junit-jupiter")
-	implementation("org.springframework:spring-test")
+	api("org.springframework:spring-test")
 	implementation("org.springframework.security:spring-security-oauth2-jose")
 }

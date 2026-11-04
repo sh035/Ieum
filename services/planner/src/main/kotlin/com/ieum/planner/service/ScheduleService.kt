@@ -233,7 +233,6 @@ class ScheduleService(
 		return period
 	}
 
-
 	// 참석자는 일정 수와 상관없이 한 번에 조회한다.
 	private fun toResponses(schedules: List<Schedule>): List<ScheduleResponse> {
 		if (schedules.isEmpty()) return emptyList()
