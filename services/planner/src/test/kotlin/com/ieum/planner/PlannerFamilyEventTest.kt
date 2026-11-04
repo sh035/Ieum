@@ -7,6 +7,7 @@ import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.planner.domain.entity.Schedule
 import com.ieum.planner.domain.entity.ScheduleAttendee
 import com.ieum.planner.domain.entity.Todo
+import com.ieum.planner.domain.entity.TodoChecklistItem
 import com.ieum.planner.domain.enums.TodoPriority
 import com.ieum.planner.domain.enums.Visibility
 import com.ieum.planner.repository.ScheduleAttendeeRepository
@@ -111,10 +112,16 @@ class PlannerFamilyEventTest @Autowired constructor(
 	fun `가족을 떠난 사람이 그 가족에 남긴 할 일과 일정, 참석을 지운다`() {
 		val leaversTodo = todo(home, leaver)
 		val subtaskOfLeaversTodo = todo(home, stayer, parentTodoId = leaversTodo)
+		val grandchildOfLeaversTodo = todo(home, stayer, parentTodoId = subtaskOfLeaversTodo)
 		val assignedToLeaver = todo(home, stayer, assignee = leaver)
+		val subtaskOfAssigned = todo(home, stayer, parentTodoId = assignedToLeaver)
 		val stayersTodo = todo(home, stayer)
+		val leaversSubtaskOfStayersTodo = todo(home, leaver, parentTodoId = stayersTodo)
 		val leaversOtherHomeTodo = todo(otherHome, leaver)
 		val leaversPrivateTodo = todo(null, leaver)
+		val checklistOfLeaversTodo = requireNotNull(
+			todoChecklistItemRepository.save(TodoChecklistItem(todoId = leaversTodo, content = "우유")).todoChecklistItemId,
+		)
 
 		val leaversSchedule = schedule(home, leaver)
 		val stayersSchedule = schedule(home, stayer)
@@ -125,9 +132,21 @@ class PlannerFamilyEventTest @Autowired constructor(
 		send("FAMILY_MEMBER_LEFT", FamilyEventData(familyId = home, accountId = leaver))
 
 		assertEquals(
-			listOf(true, true, true, false, false, false),
-			listOf(leaversTodo, subtaskOfLeaversTodo, assignedToLeaver, stayersTodo, leaversOtherHomeTodo, leaversPrivateTodo).map { todoDeleted(it) },
+			listOf(true, true, true, true, true, false, true, false, false),
+			listOf(
+				leaversTodo,
+				subtaskOfLeaversTodo,
+				grandchildOfLeaversTodo,
+				assignedToLeaver,
+				subtaskOfAssigned,
+				stayersTodo,
+				leaversSubtaskOfStayersTodo,
+				leaversOtherHomeTodo,
+				leaversPrivateTodo,
+			).map { todoDeleted(it) },
 		)
+		// 체크리스트는 직접 삭제할 때처럼 남기고 부모가 지워져 보이지 않는다.
+		assertEquals(false, todoChecklistItemRepository.findById(checklistOfLeaversTodo).get().isDeleted)
 		assertEquals(listOf(true, false, false), listOf(leaversSchedule, stayersSchedule, leaversOtherHomeSchedule).map { scheduleDeleted(it) })
 		assertEquals(listOf(true, false), listOf(leaverAttending, stayerAttending).map { attendeeDeleted(it) })
 	}
@@ -145,14 +164,15 @@ class PlannerFamilyEventTest @Autowired constructor(
 	@Test
 	fun `떠난 뒤에 다시 들어와 만든 할 일과 일정은 늦게 온 이벤트로 지우지 않는다`() {
 		val afterRejoinTodo = todo(home, leaver)
+		val afterRejoinAssigned = todo(home, stayer, assignee = leaver)
 		val afterRejoinSchedule = schedule(home, leaver)
 		val afterRejoinAttending = attend(schedule(home, stayer), leaver)
 
 		send("FAMILY_MEMBER_LEFT", FamilyEventData(familyId = home, accountId = leaver), createdAt = seoulNow().minusMinutes(1))
 
 		assertEquals(
-			listOf(false, false, false),
-			listOf(todoDeleted(afterRejoinTodo), scheduleDeleted(afterRejoinSchedule), attendeeDeleted(afterRejoinAttending)),
+			listOf(false, false, false, false),
+			listOf(todoDeleted(afterRejoinTodo), todoDeleted(afterRejoinAssigned), scheduleDeleted(afterRejoinSchedule), attendeeDeleted(afterRejoinAttending)),
 		)
 	}
 

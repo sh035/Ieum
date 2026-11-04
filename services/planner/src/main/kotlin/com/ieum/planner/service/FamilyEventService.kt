@@ -11,7 +11,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 // family 의 outbox 이벤트는 두 번 올 수 있어서 다시 처리해도 결과가 같게 만든다.
-// 체크리스트와 참석자는 직접 삭제할 때처럼 그대로 두고, 할 일 / 일정이 지워지면 함께 보이지 않는다.
+// 지운 할 일의 체크리스트와 지운 일정의 다른 참석자는 직접 삭제할 때처럼 그대로 두고, 부모가 지워지면 함께 보이지 않는다.
 @Service
 class FamilyEventService(
 	private val todoRepository: TodoRepository,
@@ -30,6 +30,7 @@ class FamilyEventService(
 			.filter { !it.createdAt.isAfter(leftAt) && (it.creatorAccountId == accountId || isStillAssigned(it, accountId, leftAt)) }
 			.mapTo(mutableSetOf()) { requireNotNull(it.todoId) }
 		// 하위 할 일은 같은 가족에 있으므로 이미 읽은 목록에서 부모를 따라 내려간다.
+		// 고아가 남지 않게 하위 할 일은 만든 시각과 상관없이 부모를 따라 지운다.
 		do {
 			val children = todos.filter { it.parentTodoId in todoIds && it.todoId !in todoIds }
 			children.forEach { todoIds += requireNotNull(it.todoId) }
