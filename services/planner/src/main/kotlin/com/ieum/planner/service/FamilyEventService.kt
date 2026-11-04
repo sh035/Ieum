@@ -1,5 +1,6 @@
 package com.ieum.planner.service
 
+import com.ieum.planner.domain.entity.Todo
 import com.ieum.planner.repository.ScheduleAttendeeRepository
 import com.ieum.planner.repository.ScheduleRepository
 import com.ieum.planner.repository.TodoRepository
@@ -26,7 +27,7 @@ class FamilyEventService(
 	fun deleteMemberData(familyId: UUID, accountId: UUID, leftAt: LocalDateTime) {
 		val todos = todoRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId)
 		val todoIds = todos
-			.filter { (it.creatorAccountId == accountId || it.assigneeAccountId == accountId) && !it.createdAt.isAfter(leftAt) }
+			.filter { !it.createdAt.isAfter(leftAt) && (it.creatorAccountId == accountId || isStillAssigned(it, accountId, leftAt)) }
 			.mapTo(mutableSetOf()) { requireNotNull(it.todoId) }
 		// 하위 할 일은 같은 가족에 있으므로 이미 읽은 목록에서 부모를 따라 내려간다.
 		do {
@@ -63,4 +64,8 @@ class FamilyEventService(
 
 		log.debug("Planner family data deleted. familyId={}", familyId)
 	}
+
+	// 담당자는 바뀔 수 있어서, 떠난 뒤에 고친 할 일은 다시 들어와 다시 맡았을 수 있으므로 건드리지 않는다.
+	private fun isStillAssigned(todo: Todo, accountId: UUID, leftAt: LocalDateTime) =
+		todo.assigneeAccountId == accountId && todo.updatedAt?.isAfter(leftAt) != true
 }

@@ -157,6 +157,17 @@ class PlannerFamilyEventTest @Autowired constructor(
 	}
 
 	@Test
+	fun `다시 들어온 뒤 다시 맡긴 옛 할 일은 늦게 온 이벤트로 지우지 않는다`() {
+		val stayersTodo = todo(home, stayer)
+		val leftAt = seoulNow()
+		todoRepository.save(todoRepository.findById(stayersTodo).get().apply { assigneeAccountId = leaver })
+
+		send("FAMILY_MEMBER_LEFT", FamilyEventData(familyId = home, accountId = leaver), createdAt = leftAt)
+
+		assertEquals(false, todoDeleted(stayersTodo))
+	}
+
+	@Test
 	fun `가족이 삭제되면 그 가족의 할 일과 일정을 지운다`() {
 		val homeTodo = todo(home, stayer)
 		val otherHomeTodo = todo(otherHome, stayer)
