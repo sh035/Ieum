@@ -10,6 +10,8 @@ interface ExpenseRepository : JpaRepository<Expense, UUID> {
 
 	fun findByExpenseIdAndIsDeletedFalse(expenseId: UUID): Expense?
 
+	fun findAllByFamilyIdAndIsDeletedFalse(familyId: UUID): List<Expense>
+
 	fun findAllByFamilyIdAndVisibilityAndSpentDateBetweenAndIsDeletedFalse(
 		familyId: UUID,
 		visibility: Visibility,
