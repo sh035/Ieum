@@ -19,6 +19,7 @@ import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -177,6 +178,27 @@ class FamilyOutboxTest @Autowired constructor(
 		verify(kafkaTemplate, never()).send(Topics.FAMILY, familyId.toString(), envelope(reload(second)))
 		assertNull(reload(first).sentAt)
 		assertNull(reload(second).sentAt)
+	}
+
+	@Test
+	fun `payload 는 클래스로 다시 읽지 않고 저장된 그대로 싣는다`() {
+		val familyId = UUID.randomUUID()
+		val payload = """{"familyId":"$familyId","removedBy":"owner"}"""
+		val event = reload(
+			outboxEventRepository.save(
+				OutboxEvent(eventType = FamilyEventType.FAMILY_MEMBER_LEFT, familyId = familyId, payload = payload, createdAt = LocalDateTime.now(clock)),
+			),
+		)
+		val expected = objectMapper.writeValueAsString(
+			IeumEvent(requireNotNull(event.outboxEventId), "FAMILY_MEMBER_LEFT", event.createdAt, objectMapper.readTree(payload)),
+		)
+		`when`(kafkaTemplate.send(Topics.FAMILY, familyId.toString(), expected)).thenReturn(CompletableFuture.completedFuture(sendResult))
+
+		outboxScheduler.relay()
+
+		verify(kafkaTemplate).send(Topics.FAMILY, familyId.toString(), expected)
+		verifyNoMoreInteractions(kafkaTemplate)
+		assertNotNull(reload(event).sentAt)
 	}
 
 	@Test

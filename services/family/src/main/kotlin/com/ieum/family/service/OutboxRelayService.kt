@@ -1,6 +1,5 @@
 package com.ieum.family.service
 
-import com.ieum.events.FamilyEventData
 import com.ieum.events.IeumEvent
 import com.ieum.events.Topics
 import com.ieum.family.domain.entity.OutboxEvent
@@ -50,7 +49,8 @@ class OutboxRelayService(
 			eventId = requireNotNull(event.outboxEventId),
 			eventType = event.eventType.name,
 			createdAt = event.createdAt,
-			data = objectMapper.readValue(event.payload, FamilyEventData::class.java),
+			// 이벤트 클래스가 바뀌어도 이미 쌓인 행이 막히지 않게 저장된 JSON 을 그대로 싣는다.
+			data = objectMapper.readTree(event.payload),
 		),
 	)
 
