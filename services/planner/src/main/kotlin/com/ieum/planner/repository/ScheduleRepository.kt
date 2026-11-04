@@ -10,6 +10,8 @@ interface ScheduleRepository : JpaRepository<Schedule, UUID> {
 
 	fun findByScheduleIdAndIsDeletedFalse(scheduleId: UUID): Schedule?
 
+	fun findAllByFamilyIdAndIsDeletedFalse(familyId: UUID): List<Schedule>
+
 	fun findAllByFamilyIdAndStartAtLessThanAndEndAtGreaterThanEqualAndIsDeletedFalse(
 		familyId: UUID,
 		rangeEnd: LocalDateTime,
