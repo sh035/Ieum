@@ -18,6 +18,8 @@ interface GroceryItemRepository : JpaRepository<GroceryItem, UUID> {
 		creatorAccountId: UUID,
 	): List<GroceryItem>
 
+	fun findAllByFamilyIdAndIsDeletedFalse(familyId: UUID): List<GroceryItem>
+
 	fun existsByStorageIdAndIsDeletedFalse(storageId: UUID): Boolean
 
 	// 브리핑 후보다. 유통기한이 지난 것도 지울 때까지 포함한다.

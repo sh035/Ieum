@@ -13,6 +13,11 @@ spring:
     properties:
       hibernate:
         default_schema: grocery
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: grocery
+      auto-offset-reset: earliest
   grpc:
     client:
       channel:

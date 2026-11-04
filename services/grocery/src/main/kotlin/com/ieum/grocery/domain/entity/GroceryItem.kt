@@ -32,9 +32,10 @@ class GroceryItem(
 	@Column(nullable = false)
 	var category: GroceryCategory,
 
+	// 가족을 떠난 사람의 개인 재고는 가족 재고로 바뀐다.
 	@Enumerated(EnumType.STRING)
-	@Column(nullable = false, updatable = false)
-	val visibility: Visibility,
+	@Column(nullable = false)
+	var visibility: Visibility,
 
 	@Column(nullable = false)
 	var quantity: Int,

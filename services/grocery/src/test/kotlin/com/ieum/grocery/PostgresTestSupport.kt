@@ -42,6 +42,9 @@ abstract class PostgresTestSupport {
 		@DynamicPropertySource
 		fun jwtKeys(registry: DynamicPropertyRegistry) {
 			registry.add("jwt.public-key") { Base64.getEncoder().encodeToString(keyPair.public.encoded) }
+			// 이벤트 처리는 리스너 메서드를 직접 불러 확인하고 Kafka 에는 붙지 않는다.
+			registry.add("spring.kafka.bootstrap-servers") { "localhost:9092" }
+			registry.add("spring.kafka.listener.auto-startup") { "false" }
 		}
 
 		fun accessToken(accountId: UUID): String {
