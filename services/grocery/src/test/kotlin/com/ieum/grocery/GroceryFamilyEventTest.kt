@@ -2,19 +2,21 @@ package com.ieum.grocery
 
 import com.ieum.events.FamilyEventData
 import com.ieum.events.IeumEvent
+import com.ieum.events.Topics
 import com.ieum.grocery.domain.entity.GroceryItem
 import com.ieum.grocery.domain.entity.Storage
 import com.ieum.grocery.domain.enums.GroceryCategory
 import com.ieum.grocery.domain.enums.Visibility
 import com.ieum.grocery.repository.GroceryItemRepository
 import com.ieum.grocery.repository.StorageRepository
-import com.ieum.grocery.service.FamilyEventReceiver
+import com.ieum.grocery.service.GroceryFamilyEventReceiver
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.web.config.TimeZoneConfig
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import tools.jackson.databind.ObjectMapper
 import java.time.Clock
@@ -25,10 +27,11 @@ import kotlin.test.assertFailsWith
 
 @SpringBootTest
 class GroceryFamilyEventTest @Autowired constructor(
-	private val familyEventReceiver: FamilyEventReceiver,
+	private val familyEventReceiver: GroceryFamilyEventReceiver,
 	private val storageRepository: StorageRepository,
 	private val groceryItemRepository: GroceryItemRepository,
 	private val objectMapper: ObjectMapper,
+	private val registry: KafkaListenerEndpointRegistry,
 ) : PostgresTestSupport() {
 
 	@MockitoBean
@@ -73,6 +76,11 @@ class GroceryFamilyEventTest @Autowired constructor(
 		familyEventReceiver.receive(objectMapper.writeValueAsString(IeumEvent(UUID.randomUUID(), type, createdAt, data)))
 
 	private fun visibilityOf(itemId: UUID) = groceryItemRepository.findById(itemId).get().visibility
+
+	@Test
+	fun `가족 이벤트 토픽을 구독한다`() {
+		assertEquals(listOf(listOf(Topics.FAMILY)), registry.listenerContainers.map { it.containerProperties.topics?.toList() })
+	}
 
 	@Test
 	fun `가족을 떠난 사람의 그 가족 개인 재고만 가족 재고로 바뀐다`() {
