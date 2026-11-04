@@ -6,4 +6,5 @@ object Topics {
 	const val NOTIFICATION_DELIVERY = "ieum.notification.delivery"
 	const val FAMILY = "ieum.family"
 	const val FAMILY_GROCERY_DLT = "ieum.family.grocery.DLT"
+	const val FAMILY_PLANNER_DLT = "ieum.family.planner.DLT"
 }

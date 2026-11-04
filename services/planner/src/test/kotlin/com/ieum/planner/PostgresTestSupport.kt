@@ -18,6 +18,8 @@ abstract class PostgresTestSupport : IeumTestSupport() {
 		fun plannerProperties(registry: DynamicPropertyRegistry) {
 			registry.add("spring.kafka.bootstrap-servers") { "localhost:9092" }
 			registry.add("spring.kafka.admin.auto-create") { "false" }
+			// 이벤트 처리는 리스너 메서드를 직접 불러 확인하고 Kafka 에는 붙지 않는다.
+			registry.add("spring.kafka.listener.auto-startup") { "false" }
 			// 테스트 중 실제 시계로 스케줄이 돌면 락을 먼저 잡아 테스트 호출이 건너뛰어진다.
 			registry.add("planner.scheduler.due-soon-cron") { "-" }
 		}
