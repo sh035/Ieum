@@ -17,10 +17,8 @@ dependencies {
 
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-kafka-test")
-	testImplementation("org.springframework.boot:spring-boot-testcontainers")
-	testImplementation("org.testcontainers:testcontainers-postgresql")
+	testImplementation(project(":libs:test-support"))
 	testImplementation("org.testcontainers:testcontainers-kafka")
-	testImplementation("org.testcontainers:testcontainers-junit-jupiter")
 }
 
 allOpen {
