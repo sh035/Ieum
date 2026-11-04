@@ -16,5 +16,7 @@ enum class FamilyErrorCode(
 	INVALID_OWNERSHIP_TRANSFER(HttpStatus.BAD_REQUEST, "Ownership cannot be transferred to yourself."),
 	OWNERSHIP_TRANSFER_REQUIRED(HttpStatus.CONFLICT, "Transfer ownership before leaving the family."),
 	INVITATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Invitation not found."),
+	INVITEE_NOT_FOUND(HttpStatus.NOT_FOUND, "Invitee not found."),
+	INVITATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "An invitation for this account is already pending."),
 	ALREADY_FAMILY_MEMBER(HttpStatus.CONFLICT, "Already a family member."),
 }

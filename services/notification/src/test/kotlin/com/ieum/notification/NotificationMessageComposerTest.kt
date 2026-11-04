@@ -5,6 +5,8 @@ import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationEventType.BUDGET_EXCEEDED
 import com.ieum.events.NotificationEventType.EXPENSE_PAYER_ASSIGNED
 import com.ieum.events.NotificationEventType.FAMILY_MEMBER_JOINED
+import com.ieum.events.NotificationEventType.FAMILY_INVITATION_DECLINED
+import com.ieum.events.NotificationEventType.FAMILY_INVITED
 import com.ieum.events.NotificationEventType.FAMILY_MEMBER_LEFT
 import com.ieum.events.NotificationEventType.FAMILY_MEMBER_REMOVED
 import com.ieum.events.NotificationEventType.FAMILY_OWNERSHIP_TRANSFERRED
@@ -94,6 +96,18 @@ class NotificationMessageComposerTest {
 		assertEquals(
 			NotificationMessage("10월 예산을 넘었어요", "30,000원 초과"),
 			compose(BUDGET_EXCEEDED, data(amount = 30000, at = LocalDateTime.of(2026, 10, 1, 0, 0))),
+		)
+	}
+
+	@Test
+	fun `가족 초대와 거절 알림 문구`() {
+		assertEquals(
+			NotificationMessage("엄마님이 가족으로 초대했어요", "[우리집] 1시간 안에 수락해 주세요"),
+			compose(FAMILY_INVITED, data(), familyName = "우리집"),
+		)
+		assertEquals(
+			NotificationMessage("엄마님이 초대를 거절했어요", "[우리집] 다음에 다시 초대해 보세요"),
+			compose(FAMILY_INVITATION_DECLINED, data(), familyName = "우리집"),
 		)
 	}
 

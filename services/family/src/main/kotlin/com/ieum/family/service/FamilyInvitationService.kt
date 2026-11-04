@@ -6,8 +6,8 @@ import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationTargetType
 import com.ieum.family.controller.dto.response.FamilyInvitationResponse
 import com.ieum.family.controller.dto.response.FamilyResponse
-import com.ieum.family.controller.dto.response.InvitedFamilyResponse
-import com.ieum.family.domain.entity.Family
+import com.ieum.family.controller.dto.response.InvitationCandidateResponse
+import com.ieum.family.controller.dto.response.ReceivedFamilyInvitationResponse
 import com.ieum.family.domain.entity.FamilyInvitation
 import com.ieum.family.domain.entity.FamilyMember
 import com.ieum.family.domain.enums.FamilyRole
@@ -15,12 +15,12 @@ import com.ieum.family.exception.FamilyErrorCode
 import com.ieum.family.repository.FamilyInvitationRepository
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
+import com.ieum.grpc.client.account.AccountClient
 import com.ieum.web.exception.IeumException
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.security.SecureRandom
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
@@ -30,67 +30,123 @@ class FamilyInvitationService(
 	private val familyRepository: FamilyRepository,
 	private val familyMemberRepository: FamilyMemberRepository,
 	private val familyInvitationRepository: FamilyInvitationRepository,
+	private val accountClient: AccountClient,
 	private val notificationEventPublisher: NotificationEventPublisher,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
 
-	// 새 코드를 만들면 기존 코드는 폐기한다.
-	@Transactional
-	fun createInvitation(accountId: String, familyId: UUID): FamilyInvitationResponse {
+	// 계정이 없는지 이미 구성원인지 구분하지 않고 같은 404 로 답한다.
+	@Transactional(readOnly = true)
+	fun findCandidate(accountId: String, familyId: UUID, email: String): InvitationCandidateResponse {
 		checkOwner(accountId, familyId)
 
-		familyInvitationRepository.findByFamilyIdAndIsDeletedFalse(familyId)?.let {
+		val profile = accountClient.findByEmail(email.trim())
+			?.takeUnless { familyMemberRepository.existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, it.accountId) }
+			?: throw IeumException(FamilyErrorCode.INVITEE_NOT_FOUND)
+
+		return InvitationCandidateResponse(accountId = profile.accountId, nickname = profile.nickname)
+	}
+
+	// 같은 사람에게 살아 있는 초대가 있으면 새로 만들지 않는다. 만료된 초대는 지우고 다시 만든다.
+	@Transactional
+	fun createInvitation(accountId: String, familyId: UUID, inviteeAccountId: UUID): FamilyInvitationResponse {
+		// account 가 느려도 같은 가족의 다른 요청이 기다리지 않게 잠그기 전에 계정을 확인한다.
+		val nickname = accountClient.getNicknames(setOf(inviteeAccountId))[inviteeAccountId]
+			?: throw IeumException(FamilyErrorCode.INVITEE_NOT_FOUND)
+		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
+		val owner = checkOwner(accountId, familyId)
+
+		if (familyMemberRepository.existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeAccountId)) {
+			throw IeumException(FamilyErrorCode.ALREADY_FAMILY_MEMBER)
+		}
+		familyInvitationRepository.findByFamilyIdAndInviteeAccountIdAndIsDeletedFalse(familyId, inviteeAccountId)?.let {
+			if (!it.isExpired()) {
+				throw IeumException(FamilyErrorCode.INVITATION_ALREADY_EXISTS)
+			}
 			it.delete()
-			// 가족당 유효 코드 1개 unique index 때문에 insert 전에 폐기를 먼저 반영한다.
+			// 같은 사람에게 살아 있는 초대 하나 unique index 때문에 insert 전에 반영한다.
 			familyInvitationRepository.flush()
 		}
 
 		val invitation = familyInvitationRepository.save(
 			FamilyInvitation(
 				familyId = familyId,
-				code = generateCode(),
+				inviterAccountId = owner.accountId,
+				inviteeAccountId = inviteeAccountId,
 				expiresAt = LocalDateTime.now().plus(INVITATION_TTL),
+			),
+		)
+
+		notificationEventPublisher.publish(
+			NotificationEventType.FAMILY_INVITED,
+			NotificationEventData(
+				recipientAccountIds = listOf(inviteeAccountId),
+				familyId = familyId,
+				targetType = NotificationTargetType.FAMILY_INVITATION,
+				targetId = invitation.familyInvitationId,
+				actorAccountId = owner.accountId,
 			),
 		)
 
 		log.debug("Family invitation created. familyId={}, accountId={}", familyId, accountId)
 
-		return FamilyInvitationResponse(code = invitation.code, expiresAt = invitation.expiresAt)
+		return invitation.toResponse(nickname)
 	}
 
 	@Transactional(readOnly = true)
-	fun getInvitation(accountId: String, familyId: UUID): FamilyInvitationResponse {
+	fun getInvitations(accountId: String, familyId: UUID): List<FamilyInvitationResponse> {
 		checkOwner(accountId, familyId)
 
-		val invitation = familyInvitationRepository.findByFamilyIdAndIsDeletedFalse(familyId)
-			?.takeUnless { it.isExpired() }
+		val invitations = familyInvitationRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId).filterNot { it.isExpired() }
+		val nicknames = if (invitations.isEmpty()) emptyMap() else accountClient.getNicknames(invitations.map { it.inviteeAccountId }.toSet())
+
+		return invitations.map { it.toResponse(nicknames[it.inviteeAccountId]) }
+	}
+
+	@Transactional
+	fun cancelInvitation(accountId: String, familyId: UUID, familyInvitationId: UUID) {
+		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
+		checkOwner(accountId, familyId)
+
+		val invitation = familyInvitationRepository.findByFamilyInvitationIdAndFamilyIdAndIsDeletedFalse(familyInvitationId, familyId)
 			?: throw IeumException(FamilyErrorCode.INVITATION_NOT_FOUND)
-
-		return FamilyInvitationResponse(code = invitation.code, expiresAt = invitation.expiresAt)
-	}
-
-	@Transactional
-	fun cancelInvitation(accountId: String, familyId: UUID) {
-		checkOwner(accountId, familyId)
-
-		familyInvitationRepository.findByFamilyIdAndIsDeletedFalse(familyId)?.delete()
+		invitation.delete()
 	}
 
 	@Transactional(readOnly = true)
-	fun verifyInvitation(code: String): InvitedFamilyResponse {
-		val family = findInvitedFamily(code)
+	fun getReceivedInvitations(accountId: String): List<ReceivedFamilyInvitationResponse> {
+		val invitations = familyInvitationRepository.findAllByInviteeAccountIdAndIsDeletedFalseOrderByCreatedAt(UUID.fromString(accountId))
+			.filterNot { it.isExpired() }
+		if (invitations.isEmpty()) {
+			return emptyList()
+		}
+		val families = familyRepository.findAllByFamilyIdInAndIsDeletedFalse(invitations.map { it.familyId }).associateBy { requireNotNull(it.familyId) }
+		val nicknames = accountClient.getNicknames(invitations.map { it.inviterAccountId }.toSet())
 
-		return InvitedFamilyResponse(familyId = requireNotNull(family.familyId), name = family.name)
+		return invitations.mapNotNull { invitation ->
+			families[invitation.familyId]?.let { family ->
+				ReceivedFamilyInvitationResponse(
+					familyInvitationId = requireNotNull(invitation.familyInvitationId),
+					familyId = invitation.familyId,
+					familyName = family.name,
+					inviterAccountId = invitation.inviterAccountId,
+					inviterNickname = nicknames[invitation.inviterAccountId],
+					expiresAt = invitation.expiresAt,
+				)
+			}
+		}
 	}
 
 	@Transactional
-	fun acceptInvitation(accountId: String, code: String): FamilyResponse {
+	fun acceptInvitation(accountId: String, familyInvitationId: UUID): FamilyResponse {
 		val me = UUID.fromString(accountId)
-		val family = findInvitedFamily(code)
-		val familyId = requireNotNull(family.familyId)
+		val familyId = findReceivedInvitation(me, familyInvitationId).familyId
 		// 혼자 남은 OWNER 가 동시에 나가 가족이 삭제되면 여기서 걸러낸다.
-		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.INVITATION_NOT_FOUND)
+		val family = familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId)
+			?: throw IeumException(FamilyErrorCode.INVITATION_NOT_FOUND)
+		// 잠그기 전에 취소나 거절이 끝났을 수 있어 잠근 뒤 다시 확인한다.
+		val invitation = findReceivedInvitation(me, familyInvitationId)
 
 		if (familyMemberRepository.existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, me)) {
 			throw IeumException(FamilyErrorCode.ALREADY_FAMILY_MEMBER)
@@ -102,6 +158,7 @@ class FamilyInvitationService(
 		} catch (e: DataIntegrityViolationException) {
 			throw IeumException(FamilyErrorCode.ALREADY_FAMILY_MEMBER)
 		}
+		invitation.delete()
 
 		notificationEventPublisher.publish(
 			NotificationEventType.FAMILY_MEMBER_JOINED,
@@ -119,34 +176,51 @@ class FamilyInvitationService(
 		return FamilyResponse(familyId = familyId, name = family.name, role = FamilyRole.MEMBER)
 	}
 
+	@Transactional
+	fun declineInvitation(accountId: String, familyInvitationId: UUID) {
+		val me = UUID.fromString(accountId)
+		val familyId = findReceivedInvitation(me, familyInvitationId).familyId
+		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.INVITATION_NOT_FOUND)
+		val invitation = findReceivedInvitation(me, familyInvitationId)
+		invitation.delete()
+
+		notificationEventPublisher.publish(
+			NotificationEventType.FAMILY_INVITATION_DECLINED,
+			NotificationEventData(
+				recipientAccountIds = listOf(invitation.inviterAccountId),
+				familyId = invitation.familyId,
+				targetType = NotificationTargetType.FAMILY,
+				targetId = invitation.familyId,
+				actorAccountId = me,
+			),
+		)
+	}
+
 	// 구성원이 아니면 가족의 존재 자체를 숨긴다.
-	private fun checkOwner(accountId: String, familyId: UUID) {
+	private fun checkOwner(accountId: String, familyId: UUID): FamilyMember {
 		val member = familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, UUID.fromString(accountId))
 			?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
 
 		if (member.role != FamilyRole.OWNER) {
 			throw IeumException(FamilyErrorCode.FAMILY_ACCESS_DENIED)
 		}
+		return member
 	}
 
-	private fun findInvitedFamily(code: String): Family {
-		val invitation = familyInvitationRepository.findByCodeAndIsDeletedFalse(code)
-			?.takeUnless { it.isExpired() }
+	// 남의 초대는 존재 자체를 숨긴다.
+	private fun findReceivedInvitation(me: UUID, familyInvitationId: UUID): FamilyInvitation =
+		familyInvitationRepository.findByFamilyInvitationIdAndIsDeletedFalse(familyInvitationId)
+			?.takeIf { it.inviteeAccountId == me && !it.isExpired() }
 			?: throw IeumException(FamilyErrorCode.INVITATION_NOT_FOUND)
 
-		return familyRepository.findByFamilyIdAndIsDeletedFalse(invitation.familyId)
-			?: throw IeumException(FamilyErrorCode.INVITATION_NOT_FOUND)
-	}
-
-	private fun generateCode(): String =
-		(1..CODE_LENGTH).map { CODE_CHARS[random.nextInt(CODE_CHARS.length)] }.joinToString("")
+	private fun FamilyInvitation.toResponse(inviteeNickname: String?) = FamilyInvitationResponse(
+		familyInvitationId = requireNotNull(familyInvitationId),
+		inviteeAccountId = inviteeAccountId,
+		inviteeNickname = inviteeNickname,
+		expiresAt = expiresAt,
+	)
 
 	companion object {
 		private val INVITATION_TTL = Duration.ofHours(1)
-		private const val CODE_LENGTH = 8
-
-		// 헷갈리는 0/O, 1/I는 뺀다.
-		private const val CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-		private val random = SecureRandom()
 	}
 }

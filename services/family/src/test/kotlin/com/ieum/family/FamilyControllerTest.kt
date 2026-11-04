@@ -141,16 +141,20 @@ class FamilyControllerTest @Autowired constructor(
 	}
 
 	@Test
-	fun `혼자 남은 OWNER가 나가면 가족과 초대 코드가 삭제된다`() {
+	fun `혼자 남은 OWNER가 나가면 가족과 대기 중인 초대가 모두 삭제된다`() {
 		val familyId = requireNotNull(familyRepository.save(Family(name = "자취방")).familyId)
 		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER))
-		familyInvitationRepository.save(FamilyInvitation(familyId = familyId, code = "ABCD1234", expiresAt = LocalDateTime.now().plusDays(1)))
+		listOf(memberId, UUID.randomUUID()).forEach { invitee ->
+			familyInvitationRepository.save(
+				FamilyInvitation(familyId = familyId, inviterAccountId = ownerId, inviteeAccountId = invitee, expiresAt = LocalDateTime.now().plusHours(1)),
+			)
+		}
 
 		leave(familyId, ownerId).andExpect { status { isNoContent() } }
 
 		assertNull(roleOf(familyId, ownerId))
 		assertNull(familyRepository.findByFamilyIdAndIsDeletedFalse(familyId))
-		assertNull(familyInvitationRepository.findByFamilyIdAndIsDeletedFalse(familyId))
+		assertEquals(emptyList(), familyInvitationRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId))
 	}
 
 	@Test

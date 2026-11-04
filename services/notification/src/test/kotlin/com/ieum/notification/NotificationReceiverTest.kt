@@ -197,6 +197,35 @@ class NotificationReceiverTest @Autowired constructor(
 	}
 
 	@Test
+	fun `초대와 내보내기 알림은 받는 사람이 구성원이 아니라 개인 알림으로 저장한다`() {
+		send(event(type = NotificationEventType.FAMILY_INVITED, recipients = listOf(dad)))
+		send(event(type = NotificationEventType.FAMILY_MEMBER_REMOVED, recipients = listOf(kid)))
+		send(event(type = NotificationEventType.FAMILY_INVITATION_DECLINED, recipients = listOf(mom)))
+
+		awaitCount(3)
+		assertEquals(
+			mapOf(
+				NotificationEventType.FAMILY_INVITED to null,
+				NotificationEventType.FAMILY_MEMBER_REMOVED to null,
+				NotificationEventType.FAMILY_INVITATION_DECLINED to familyId,
+			),
+			notificationRepository.findAll().associate { it.type to it.familyId },
+		)
+	}
+
+	@Test
+	fun `초대와 거절도 가족 이름을 쓴다`() {
+		send(event(type = NotificationEventType.FAMILY_INVITED, recipients = listOf(dad)))
+		send(event(type = NotificationEventType.FAMILY_INVITATION_DECLINED, recipients = listOf(kid)))
+
+		awaitCount(2)
+		assertEquals(
+			setOf("[우리집] 1시간 안에 수락해 주세요", "[우리집] 다음에 다시 초대해 보세요"),
+			notificationRepository.findAll().map { it.body }.toSet(),
+		)
+	}
+
+	@Test
 	fun `같은 이벤트가 두 번 와도 한 건이다`() {
 		val event = event(recipients = listOf(dad))
 		send(event)

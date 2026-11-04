@@ -4,6 +4,7 @@ import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.GrpcClientSupport
 import com.ieum.proto.account.v1.AccountInternalServiceGrpc
 import com.ieum.proto.account.v1.AccountInternalServiceGrpc.AccountInternalServiceBlockingStub
+import com.ieum.proto.account.v1.FindAccountByEmailRequest
 import com.ieum.proto.account.v1.GetNicknamesRequest
 import org.springframework.grpc.client.GrpcChannelFactory
 import org.springframework.stereotype.Component
@@ -29,5 +30,12 @@ class GrpcAccountClient(
 		}
 
 		return response.nicknamesMap.entries.associate { (accountId, nickname) -> accountId.toUuid() to nickname }
+	}
+
+	override fun findByEmail(email: String): AccountProfile? {
+		val response = callOrNull { it.findAccountByEmail(FindAccountByEmailRequest.newBuilder().setEmail(email).build()) }
+			?: return null
+
+		return AccountProfile(accountId = response.accountId.toUuid(), nickname = response.nickname)
 	}
 }

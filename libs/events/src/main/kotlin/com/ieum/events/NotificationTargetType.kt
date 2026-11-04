@@ -4,6 +4,7 @@ enum class NotificationTargetType {
 	TODO,
 	SCHEDULE,
 	FAMILY,
+	FAMILY_INVITATION,
 	EXPENSE,
 	BUDGET,
 }

@@ -8,6 +8,7 @@ import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -174,11 +175,14 @@ class FamilyMemberControllerTest @Autowired constructor(
 		remove(familyId, memberIdOf(familyId, memberId)).andExpect { status { isNoContent() } }
 
 		assertNull(roleOf(familyId, memberId))
+		`when`(accountClient.getNicknames(setOf(memberId))).thenReturn(mapOf(memberId to "아빠"))
 		val response = mockMvc.post("/api/v1/family/$familyId/invitation") {
 			header("Authorization", "Bearer ${accessToken(ownerId)}")
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"inviteeAccountId":"$memberId"}"""
 		}.andReturn().response.contentAsString
-		val code = objectMapper.readTree(response).get("data").get("code").asString()
-		mockMvc.post("/api/v1/family-invitation/$code/accept") { header("Authorization", "Bearer ${accessToken(memberId)}") }
+		val invitationId = objectMapper.readTree(response).get("data").get("familyInvitationId").asString()
+		mockMvc.post("/api/v1/family-invitation/$invitationId/accept") { header("Authorization", "Bearer ${accessToken(memberId)}") }
 			.andExpect { status { isCreated() } }
 		assertEquals(FamilyRole.MEMBER, roleOf(familyId, memberId))
 	}
