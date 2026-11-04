@@ -10,12 +10,14 @@ import com.ieum.grocery.repository.GroceryItemRepository
 import com.ieum.grocery.repository.StorageRepository
 import com.ieum.grocery.service.FamilyEventReceiver
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.web.config.TimeZoneConfig
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import tools.jackson.databind.ObjectMapper
+import java.time.Clock
 import java.time.LocalDateTime
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -63,7 +65,10 @@ class GroceryFamilyEventTest @Autowired constructor(
 		)
 	}
 
-	private fun send(type: String, data: FamilyEventData, createdAt: LocalDateTime = LocalDateTime.now().plusMinutes(1)) =
+	// family 는 이벤트 시각을 서울 시계로 찍는다.
+	private fun seoulNow() = LocalDateTime.now(Clock.system(TimeZoneConfig.SEOUL))
+
+	private fun send(type: String, data: FamilyEventData, createdAt: LocalDateTime = seoulNow().plusMinutes(1)) =
 		familyEventReceiver.receive(objectMapper.writeValueAsString(IeumEvent(UUID.randomUUID(), type, createdAt, data)))
 
 	private fun visibilityOf(itemId: UUID) = groceryItemRepository.findById(itemId).get().visibility
@@ -96,7 +101,7 @@ class GroceryFamilyEventTest @Autowired constructor(
 	fun `떠난 뒤에 다시 들어와 만든 개인 재고는 늦게 온 이벤트로 바뀌지 않는다`() {
 		val afterRejoin = item(home, leaver, Visibility.PRIVATE)
 
-		send("FAMILY_MEMBER_LEFT", FamilyEventData(familyId = home, accountId = leaver), createdAt = LocalDateTime.now().minusMinutes(1))
+		send("FAMILY_MEMBER_LEFT", FamilyEventData(familyId = home, accountId = leaver), createdAt = seoulNow().minusMinutes(1))
 
 		assertEquals(Visibility.PRIVATE, visibilityOf(afterRejoin))
 	}
