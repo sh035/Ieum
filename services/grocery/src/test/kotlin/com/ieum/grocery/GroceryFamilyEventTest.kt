@@ -14,6 +14,7 @@ import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.web.config.TimeZoneConfig
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.aop.framework.ProxyFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry
@@ -134,6 +135,17 @@ class GroceryFamilyEventTest @Autowired constructor(
 	@Test
 	fun `떠난 사람이 없는 떠남 이벤트는 다시 시도하지 않을 오류로 거른다`() {
 		assertFailsWith<IllegalArgumentException> { send("FAMILY_MEMBER_LEFT", FamilyEventData(familyId = home)) }
+	}
+
+	@Test
+	fun `수신기에 프록시가 붙어도 이벤트를 처리한다`() {
+		val leaversPrivate = item(home, leaver, Visibility.PRIVATE)
+		val proxied = ProxyFactory(familyEventReceiver).apply { isProxyTargetClass = true }.proxy as GroceryFamilyEventReceiver
+		val event = IeumEvent(UUID.randomUUID(), "FAMILY_MEMBER_LEFT", seoulNow().plusMinutes(1), FamilyEventData(familyId = home, accountId = leaver))
+
+		proxied.receive(objectMapper.writeValueAsString(event))
+
+		assertEquals(Visibility.FAMILY, visibilityOf(leaversPrivate))
 	}
 
 	@Test

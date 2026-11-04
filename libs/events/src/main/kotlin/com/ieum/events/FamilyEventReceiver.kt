@@ -16,8 +16,9 @@ abstract class FamilyEventReceiver(
 	private val log = LoggerFactory.getLogger(javaClass)
 
 	// family 가 새 이벤트 종류를 먼저 배포해도 막히지 않게 모르는 종류는 건너뛴다.
+	// 하위 클래스에 AOP 프록시가 붙어도 프록시가 가로채 대상 객체로 넘기도록 open 으로 둔다.
 	@KafkaListener(topics = [Topics.FAMILY])
-	fun receive(message: String) {
+	open fun receive(message: String) {
 		val event = objectMapper.readValue<IeumEvent<FamilyEventData>>(message)
 		val data = event.data
 		log.debug("Family event received. eventType={}, eventId={}, familyId={}", event.eventType, event.eventId, data.familyId)
