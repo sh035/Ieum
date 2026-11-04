@@ -42,9 +42,11 @@ class NotificationService(
 			?.takeIf { type in FAMILY_NAME_TYPES }
 			?.let { familyId -> lookup { familyClient.getFamily(familyId)?.name } }
 		val message = composer.compose(type, data, nickname, familyName)
+		// 받는 사람이 그 가족 구성원이 아닌 알림은 가족 탭에 열 수 없어서 개인 알림으로 저장한다.
+		val inboxFamilyId = data.familyId.takeUnless { type in NON_MEMBER_TYPES }
 
 		recipients.forEach { accountId ->
-			saveAndDeliver(accountId, type, message, dedupKey, data.familyId, data.targetType, data.targetId)
+			saveAndDeliver(accountId, type, message, dedupKey, inboxFamilyId, data.targetType, data.targetId)
 		}
 	}
 
@@ -103,6 +105,8 @@ class NotificationService(
 
 	companion object {
 		private const val UNIQUE_VIOLATION = "23505"
+
+		private val NON_MEMBER_TYPES = setOf(NotificationEventType.FAMILY_INVITED, NotificationEventType.FAMILY_MEMBER_REMOVED)
 
 		// 문구에 가족 이름을 넣는 알림만 family 를 조회한다.
 		private val FAMILY_NAME_TYPES = setOf(
