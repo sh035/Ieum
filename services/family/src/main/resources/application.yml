@@ -19,6 +19,9 @@ spring:
       properties:
         # Kafka 장애가 API 지연으로 번지지 않게 발행 대기를 2초로 끊는다.
         max.block.ms: 2000
+        # outbox 전송 대기(5초)가 끝난 뒤 프로듀서가 혼자 재시도해 같은 이벤트가 쌓이지 않게 맞춘다.
+        request.timeout.ms: 4000
+        delivery.timeout.ms: 5000
 
 server:
   port: 8082

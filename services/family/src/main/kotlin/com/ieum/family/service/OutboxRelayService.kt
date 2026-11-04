@@ -27,7 +27,7 @@ class OutboxRelayService(
 	// 같은 가족의 이벤트 순서가 바뀌지 않도록 실패하면 거기서 멈추고 다음 주기에 그 행부터 다시 보낸다.
 	// 보낸 뒤 sent_at 저장 전에 죽으면 다시 보내므로 받는 쪽은 같은 이벤트를 두 번 받아도 결과가 같아야 한다.
 	fun relay() {
-		for (event in outboxEventRepository.findTop100BySentAtIsNullOrderByCreatedAtAscOutboxEventIdAsc()) {
+		for (event in outboxEventRepository.findTop10BySentAtIsNullOrderByCreatedAtAscOutboxEventIdAsc()) {
 			try {
 				kafkaTemplate.send(Topics.FAMILY, event.familyId.toString(), envelope(event)).get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
 			} catch (e: Exception) {

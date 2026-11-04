@@ -17,7 +17,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.mock
-import org.mockito.Mockito.never
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.Mockito.`when`
@@ -88,13 +88,13 @@ class FamilyOutboxTest @Autowired constructor(
 		),
 	)
 
-	// 저장된 행 기준으로 만들어야 DB 가 자른 시각 정밀도까지 같아진다.
-	private fun envelope(event: OutboxEvent) = objectMapper.writeValueAsString(
+	// 시각은 DB 가 자른 정밀도까지 같아야 해서 저장된 행에서 가져오고, 종류와 내용은 기대값을 직접 쓴다.
+	private fun envelope(event: OutboxEvent, type: String, familyId: UUID) = objectMapper.writeValueAsString(
 		IeumEvent(
 			eventId = requireNotNull(event.outboxEventId),
-			eventType = event.eventType.name,
-			createdAt = event.createdAt,
-			data = objectMapper.readValue(event.payload, FamilyEventData::class.java),
+			eventType = type,
+			createdAt = reload(event).createdAt,
+			data = FamilyEventData(familyId = familyId),
 		),
 	)
 
@@ -132,7 +132,7 @@ class FamilyOutboxTest @Autowired constructor(
 	}
 
 	@Test
-	fun `요청이 실패하면 이벤트도 남지 않는다`() {
+	fun `나갈 수 없으면 이벤트를 쌓지 않는다`() {
 		val familyId = createFamily(member)
 
 		mockMvc.post("/api/v1/family/$familyId/leave") { header("Authorization", "Bearer ${accessToken(owner)}") }
@@ -149,17 +149,18 @@ class FamilyOutboxTest @Autowired constructor(
 		val earlier = event(FamilyEventType.FAMILY_MEMBER_LEFT, familyId, now.minusSeconds(2))
 		val sent = event(FamilyEventType.FAMILY_MEMBER_LEFT, familyId, now.minusSeconds(3)).apply { sentAt = now }
 		outboxEventRepository.save(sent)
-		listOf(earlier, later).forEach {
-			`when`(kafkaTemplate.send(Topics.FAMILY, familyId.toString(), envelope(reload(it))))
-				.thenReturn(CompletableFuture.completedFuture(sendResult))
+		val earlierEnvelope = envelope(earlier, "FAMILY_MEMBER_LEFT", familyId)
+		val laterEnvelope = envelope(later, "FAMILY_DELETED", familyId)
+		listOf(earlierEnvelope, laterEnvelope).forEach {
+			`when`(kafkaTemplate.send(Topics.FAMILY, familyId.toString(), it)).thenReturn(CompletableFuture.completedFuture(sendResult))
 		}
 
 		outboxScheduler.relay()
 
 		val order = inOrder(kafkaTemplate)
-		order.verify(kafkaTemplate).send(Topics.FAMILY, familyId.toString(), envelope(reload(earlier)))
-		order.verify(kafkaTemplate).send(Topics.FAMILY, familyId.toString(), envelope(reload(later)))
-		verify(kafkaTemplate, never()).send(Topics.FAMILY, familyId.toString(), envelope(reload(sent)))
+		order.verify(kafkaTemplate).send(Topics.FAMILY, familyId.toString(), earlierEnvelope)
+		order.verify(kafkaTemplate).send(Topics.FAMILY, familyId.toString(), laterEnvelope)
+		verifyNoMoreInteractions(kafkaTemplate)
 		assertNotNull(reload(earlier).sentAt)
 		assertNotNull(reload(later).sentAt)
 	}
@@ -170,14 +171,27 @@ class FamilyOutboxTest @Autowired constructor(
 		val now = LocalDateTime.now(clock)
 		val first = event(FamilyEventType.FAMILY_MEMBER_LEFT, familyId, now.minusSeconds(2))
 		val second = event(FamilyEventType.FAMILY_DELETED, familyId, now.minusSeconds(1))
-		`when`(kafkaTemplate.send(Topics.FAMILY, familyId.toString(), envelope(reload(first))))
+		val firstEnvelope = envelope(first, "FAMILY_MEMBER_LEFT", familyId)
+		val secondEnvelope = envelope(second, "FAMILY_DELETED", familyId)
+		`when`(kafkaTemplate.send(Topics.FAMILY, familyId.toString(), firstEnvelope))
 			.thenReturn(CompletableFuture.failedFuture(IllegalStateException("broker down")))
+			.thenReturn(CompletableFuture.completedFuture(sendResult))
+		`when`(kafkaTemplate.send(Topics.FAMILY, familyId.toString(), secondEnvelope)).thenReturn(CompletableFuture.completedFuture(sendResult))
 
 		outboxScheduler.relay()
 
-		verify(kafkaTemplate, never()).send(Topics.FAMILY, familyId.toString(), envelope(reload(second)))
+		verify(kafkaTemplate).send(Topics.FAMILY, familyId.toString(), firstEnvelope)
+		verifyNoMoreInteractions(kafkaTemplate)
 		assertNull(reload(first).sentAt)
 		assertNull(reload(second).sentAt)
+
+		outboxScheduler.relay()
+
+		val order = inOrder(kafkaTemplate)
+		order.verify(kafkaTemplate, times(2)).send(Topics.FAMILY, familyId.toString(), firstEnvelope)
+		order.verify(kafkaTemplate).send(Topics.FAMILY, familyId.toString(), secondEnvelope)
+		assertNotNull(reload(first).sentAt)
+		assertNotNull(reload(second).sentAt)
 	}
 
 	@Test
