@@ -1,5 +1,8 @@
 package com.ieum.family
 
+import com.ieum.family.domain.entity.Family
+import com.ieum.family.domain.entity.FamilyInvitation
+import com.ieum.family.domain.entity.FamilyMember
 import com.ieum.family.domain.enums.FamilyRole
 import com.ieum.family.repository.FamilyInvitationRepository
 import com.ieum.family.repository.FamilyMemberRepository
@@ -14,8 +17,10 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import tools.jackson.databind.ObjectMapper
+import java.time.LocalDateTime
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -93,5 +98,65 @@ class FamilyControllerTest @Autowired constructor(
 			jsonPath("\$.data") { isArray() }
 			jsonPath("\$.data.length()") { value(0) }
 		}
+	}
+
+	private val ownerId = UUID.randomUUID()
+	private val memberId = UUID.randomUUID()
+
+	private fun saveFamily(): UUID {
+		val familyId = requireNotNull(familyRepository.save(Family(name = "우리집")).familyId)
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = memberId, role = FamilyRole.MEMBER))
+		return familyId
+	}
+
+	private fun leave(familyId: UUID, accountId: UUID) = mockMvc.post("/api/v1/family/$familyId/leave") {
+		header("Authorization", "Bearer ${accessToken(accountId)}")
+	}
+
+	private fun roleOf(familyId: UUID, accountId: UUID) =
+		familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, accountId)?.role
+
+	private fun getMembers(familyId: UUID, accountId: UUID) = mockMvc.get("/api/v1/family/$familyId/member") {
+		header("Authorization", "Bearer ${accessToken(accountId)}")
+	}
+
+	@Test
+	fun `구성원은 가족에서 나간다`() {
+		val familyId = saveFamily()
+
+		leave(familyId, memberId).andExpect { status { isNoContent() } }
+
+		assertNull(roleOf(familyId, memberId))
+		getMembers(familyId, ownerId).andExpect { jsonPath("\$.data.length()") { value(1) } }
+	}
+
+	@Test
+	fun `OWNER는 다른 구성원이 있으면 소유권을 넘겨야 나갈 수 있다`() {
+		val familyId = saveFamily()
+
+		leave(familyId, ownerId).andExpect { status { isConflict() } }
+
+		assertEquals(FamilyRole.OWNER, roleOf(familyId, ownerId))
+	}
+
+	@Test
+	fun `혼자 남은 OWNER가 나가면 가족과 초대 코드가 삭제된다`() {
+		val familyId = requireNotNull(familyRepository.save(Family(name = "자취방")).familyId)
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER))
+		familyInvitationRepository.save(FamilyInvitation(familyId = familyId, code = "ABCD1234", expiresAt = LocalDateTime.now().plusDays(1)))
+
+		leave(familyId, ownerId).andExpect { status { isNoContent() } }
+
+		assertNull(roleOf(familyId, ownerId))
+		assertNull(familyRepository.findByFamilyIdAndIsDeletedFalse(familyId))
+		assertNull(familyInvitationRepository.findByFamilyIdAndIsDeletedFalse(familyId))
+	}
+
+	@Test
+	fun `구성원이 아니면 나갈 수 없다 404`() {
+		val familyId = saveFamily()
+
+		leave(familyId, UUID.randomUUID()).andExpect { status { isNotFound() } }
 	}
 }

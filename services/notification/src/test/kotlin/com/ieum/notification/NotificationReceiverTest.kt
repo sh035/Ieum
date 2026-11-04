@@ -185,6 +185,18 @@ class NotificationReceiverTest @Autowired constructor(
 	}
 
 	@Test
+	fun `내보내기와 소유권 넘기기도 가족 이름을 쓴다`() {
+		send(event(type = NotificationEventType.FAMILY_MEMBER_REMOVED, recipients = listOf(dad)))
+		send(event(type = NotificationEventType.FAMILY_OWNERSHIP_TRANSFERRED, recipients = listOf(kid)))
+
+		awaitCount(2)
+		assertEquals(
+			setOf("[우리집]에서 나오게 됐어요" to "엄마님이 짐을 싸 줬어요", "엄마님이 집을 맡겼어요" to "[우리집] 이제 우리 집을 부탁해요"),
+			notificationRepository.findAll().map { it.title to it.body }.toSet(),
+		)
+	}
+
+	@Test
 	fun `같은 이벤트가 두 번 와도 한 건이다`() {
 		val event = event(recipients = listOf(dad))
 		send(event)

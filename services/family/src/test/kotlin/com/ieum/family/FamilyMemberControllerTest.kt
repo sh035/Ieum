@@ -13,9 +13,17 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.patch
+import org.springframework.test.web.servlet.post
+import tools.jackson.databind.ObjectMapper
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.UUID
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -24,6 +32,7 @@ class FamilyMemberControllerTest @Autowired constructor(
 	private val familyRepository: FamilyRepository,
 	private val familyMemberRepository: FamilyMemberRepository,
 	private val familyInvitationRepository: FamilyInvitationRepository,
+	private val objectMapper: ObjectMapper,
 ) : PostgresTestSupport() {
 
 	private val ownerId = UUID.randomUUID()
@@ -143,5 +152,104 @@ class FamilyMemberControllerTest @Autowired constructor(
 		val familyId = createFamily()
 
 		updateRole(familyId, memberIdOf(familyId, memberId), "ADMIN").andExpect { status { isBadRequest() } }
+	}
+
+	private fun remove(familyId: UUID, familyMemberId: UUID, accountId: UUID = ownerId) =
+		mockMvc.delete("/api/v1/family/$familyId/member/$familyMemberId") {
+			header("Authorization", "Bearer ${accessToken(accountId)}")
+		}
+
+	private fun transferOwnership(familyId: UUID, familyMemberId: UUID, accountId: UUID = ownerId) =
+		mockMvc.post("/api/v1/family/$familyId/member/$familyMemberId/transfer-ownership") {
+			header("Authorization", "Bearer ${accessToken(accountId)}")
+		}
+
+	private fun roleOf(familyId: UUID, accountId: UUID) =
+		familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, accountId)?.role
+
+	@Test
+	fun `OWNER는 구성원을 내보내고 내보낸 사람은 다시 들어올 수 있다`() {
+		val familyId = createFamily()
+
+		remove(familyId, memberIdOf(familyId, memberId)).andExpect { status { isNoContent() } }
+
+		assertNull(roleOf(familyId, memberId))
+		val response = mockMvc.post("/api/v1/family/$familyId/invitation") {
+			header("Authorization", "Bearer ${accessToken(ownerId)}")
+		}.andReturn().response.contentAsString
+		val code = objectMapper.readTree(response).get("data").get("code").asString()
+		mockMvc.post("/api/v1/family-invitation/$code/accept") { header("Authorization", "Bearer ${accessToken(memberId)}") }
+			.andExpect { status { isCreated() } }
+		assertEquals(FamilyRole.MEMBER, roleOf(familyId, memberId))
+	}
+
+	@Test
+	fun `OWNER만 내보낼 수 있고 OWNER는 내보낼 수 없다`() {
+		val familyId = createFamily()
+		val managerId = UUID.randomUUID()
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = managerId, role = FamilyRole.MANAGER))
+
+		remove(familyId, memberIdOf(familyId, memberId), accountId = managerId).andExpect { status { isForbidden() } }
+		remove(familyId, memberIdOf(familyId, ownerId)).andExpect { status { isBadRequest() } }
+		remove(familyId, UUID.randomUUID()).andExpect { status { isNotFound() } }
+		remove(familyId, memberIdOf(familyId, memberId), accountId = UUID.randomUUID()).andExpect { status { isNotFound() } }
+	}
+
+	@Test
+	fun `다른 가족의 구성원은 내보내거나 소유권을 넘길 수 없다 404`() {
+		val familyId = createFamily()
+		val otherFamilyId = requireNotNull(familyRepository.save(Family(name = "옆집")).familyId)
+		val neighbor = UUID.randomUUID()
+		val otherMember = familyMemberRepository.save(FamilyMember(familyId = otherFamilyId, accountId = neighbor, role = FamilyRole.MEMBER))
+
+		remove(familyId, requireNotNull(otherMember.familyMemberId)).andExpect { status { isNotFound() } }
+		transferOwnership(familyId, requireNotNull(otherMember.familyMemberId)).andExpect { status { isNotFound() } }
+
+		assertEquals(FamilyRole.MEMBER, roleOf(otherFamilyId, neighbor))
+		assertEquals(FamilyRole.OWNER, roleOf(familyId, ownerId))
+	}
+
+	@Test
+	fun `OWNER는 소유권을 넘기고 MEMBER가 된다`() {
+		val familyId = createFamily()
+
+		transferOwnership(familyId, memberIdOf(familyId, memberId)).andExpect { status { isNoContent() } }
+
+		assertEquals(FamilyRole.OWNER, roleOf(familyId, memberId))
+		assertEquals(FamilyRole.MEMBER, roleOf(familyId, ownerId))
+	}
+
+	@Test
+	fun `OWNER만 소유권을 넘길 수 있고 자신에게는 넘길 수 없다`() {
+		val familyId = createFamily()
+
+		transferOwnership(familyId, memberIdOf(familyId, ownerId), accountId = memberId).andExpect { status { isForbidden() } }
+		transferOwnership(familyId, memberIdOf(familyId, ownerId)).andExpect { status { isBadRequest() } }
+		transferOwnership(familyId, UUID.randomUUID()).andExpect { status { isNotFound() } }
+
+		assertEquals(FamilyRole.OWNER, roleOf(familyId, ownerId))
+	}
+
+	@Test
+	fun `소유권 넘기기가 동시에 두 번 오면 먼저 처리된 것만 반영된다`() {
+		val familyId = createFamily()
+		val otherId = UUID.randomUUID()
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = otherId, role = FamilyRole.MEMBER))
+		val targets = listOf(memberIdOf(familyId, memberId), memberIdOf(familyId, otherId))
+		val start = CountDownLatch(1)
+		val executor = Executors.newFixedThreadPool(targets.size)
+
+		val results = targets.map { target ->
+			executor.submit<Int> {
+				start.await()
+				transferOwnership(familyId, target).andReturn().response.status
+			}
+		}
+		start.countDown()
+		val statuses = results.map { it.get(10, TimeUnit.SECONDS) }.sorted()
+		executor.shutdown()
+
+		assertEquals(listOf(204, 403), statuses)
+		assertEquals(1, familyMemberRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId).count { it.role == FamilyRole.OWNER })
 	}
 }
