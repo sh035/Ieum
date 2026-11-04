@@ -48,9 +48,9 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 		return familyId
 	}
 
-	private fun getRole(familyId: Any, accountId: Any) =
+	private fun getRole(familyId: String, accountId: String) =
 		stub.getMemberRole(
-			GetMemberRoleRequest.newBuilder().setFamilyId(familyId.toString()).setAccountId(accountId.toString()).build(),
+			GetMemberRoleRequest.newBuilder().setFamilyId(familyId).setAccountId(accountId).build(),
 		)
 
 	private fun assertStatus(code: Status.Code, call: () -> Unit) =
@@ -63,15 +63,15 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MANAGER),
 		)
 
-		assertEquals(ProtoFamilyRole.FAMILY_ROLE_OWNER, getRole(familyId, ownerId).role)
-		assertEquals(ProtoFamilyRole.FAMILY_ROLE_MANAGER, getRole(familyId, manager.accountId).role)
+		assertEquals(ProtoFamilyRole.FAMILY_ROLE_OWNER, getRole(familyId.toString(), ownerId.toString()).role)
+		assertEquals(ProtoFamilyRole.FAMILY_ROLE_MANAGER, getRole(familyId.toString(), manager.accountId.toString()).role)
 	}
 
 	@Test
 	fun `구성원이 아니면 NOT_FOUND`() {
 		val familyId = createFamily()
 
-		assertStatus(Status.Code.NOT_FOUND) { getRole(familyId, UUID.randomUUID()) }
+		assertStatus(Status.Code.NOT_FOUND) { getRole(familyId.toString(), UUID.randomUUID().toString()) }
 	}
 
 	@Test
@@ -83,20 +83,20 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 		member.delete()
 		familyMemberRepository.save(member)
 
-		assertStatus(Status.Code.NOT_FOUND) { getRole(familyId, member.accountId) }
+		assertStatus(Status.Code.NOT_FOUND) { getRole(familyId.toString(), member.accountId.toString()) }
 	}
 
 	@Test
 	fun `UUID 형식이 아니면 INVALID_ARGUMENT`() {
-		assertStatus(Status.Code.INVALID_ARGUMENT) { getRole("not-a-uuid", ownerId) }
-		assertStatus(Status.Code.INVALID_ARGUMENT) { getRoles(createFamily(), ownerId, "not-a-uuid") }
+		assertStatus(Status.Code.INVALID_ARGUMENT) { getRole("not-a-uuid", ownerId.toString()) }
+		assertStatus(Status.Code.INVALID_ARGUMENT) { getRoles(createFamily().toString(), ownerId.toString(), "not-a-uuid") }
 	}
 
-	private fun getRoles(familyId: Any, vararg accountIds: Any) =
+	private fun getRoles(familyId: String, vararg accountIds: String) =
 		stub.getMemberRoles(
 			GetMemberRolesRequest.newBuilder()
-				.setFamilyId(familyId.toString())
-				.addAllAccountIds(accountIds.map { it.toString() })
+				.setFamilyId(familyId)
+				.addAllAccountIds(accountIds.toList())
 				.build(),
 		).rolesMap
 
@@ -114,7 +114,7 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 		val otherFamilyMember = UUID.randomUUID()
 		familyMemberRepository.save(FamilyMember(familyId = createFamily(), accountId = otherFamilyMember, role = FamilyRole.OWNER))
 
-		val roles = getRoles(familyId, ownerId, member.accountId, left.accountId, otherFamilyMember, UUID.randomUUID())
+		val roles = getRoles(familyId.toString(), ownerId.toString(), member.accountId.toString(), left.accountId.toString(), otherFamilyMember.toString(), UUID.randomUUID().toString())
 
 		assertEquals(
 			mapOf(
@@ -123,11 +123,11 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 			),
 			roles,
 		)
-		assertEquals(emptyMap(), getRoles(familyId))
+		assertEquals(emptyMap(), getRoles(familyId.toString()))
 	}
 
-	private fun getFamily(familyId: Any) =
-		stub.getFamily(GetFamilyRequest.newBuilder().setFamilyId(familyId.toString()).build())
+	private fun getFamily(familyId: String) =
+		stub.getFamily(GetFamilyRequest.newBuilder().setFamilyId(familyId).build())
 
 	@Test
 	fun `가족 이름과 현재 구성원을 돌려준다`() {
@@ -136,7 +136,7 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MANAGER),
 		)
 
-		val family = getFamily(familyId)
+		val family = getFamily(familyId.toString())
 
 		assertEquals("우리집", family.name)
 		assertEquals(
@@ -154,7 +154,7 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 		left.delete()
 		familyMemberRepository.save(left)
 
-		assertEquals(listOf(ownerId.toString()), getFamily(familyId).membersList.map { it.accountId })
+		assertEquals(listOf(ownerId.toString()), getFamily(familyId.toString()).membersList.map { it.accountId })
 	}
 
 	@Test
@@ -162,8 +162,8 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 		val deleted = familyRepository.save(Family(name = "옛집")).apply { delete() }
 		familyRepository.save(deleted)
 
-		assertStatus(Status.Code.NOT_FOUND) { getFamily(UUID.randomUUID()) }
-		assertStatus(Status.Code.NOT_FOUND) { getFamily(requireNotNull(deleted.familyId)) }
+		assertStatus(Status.Code.NOT_FOUND) { getFamily(UUID.randomUUID().toString()) }
+		assertStatus(Status.Code.NOT_FOUND) { getFamily(requireNotNull(deleted.familyId).toString()) }
 		assertStatus(Status.Code.INVALID_ARGUMENT) { getFamily("not-a-uuid") }
 	}
 }

@@ -13,6 +13,8 @@ class TimeZoneConfig {
 	}
 
 	companion object {
-		val SEOUL: ZoneId = ZoneId.of("Asia/Seoul")
+		// @Scheduled 의 zone 처럼 상수가 필요한 곳에 쓴다.
+		const val ZONE = "Asia/Seoul"
+		val SEOUL: ZoneId = ZoneId.of(ZONE)
 	}
 }

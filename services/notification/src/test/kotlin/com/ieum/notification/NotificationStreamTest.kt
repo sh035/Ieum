@@ -7,6 +7,7 @@ import com.ieum.events.NotificationTargetType
 import com.ieum.events.Topics
 import com.ieum.grpc.client.account.AccountClient
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.notification.controller.dto.response.NotificationResponse
 import com.ieum.notification.repository.NotificationRepository
 import com.ieum.notification.service.delivery.SseEmitterRegistry
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -117,8 +118,20 @@ class NotificationStreamTest @Autowired constructor(
 		val accountId = UUID.randomUUID()
 		sseEmitterRegistry.connect(accountId).complete()
 
-		sseEmitterRegistry.send(accountId, "notification", "hello")
-		sseEmitterRegistry.send(accountId, "notification", "hello")
+		val notification = NotificationResponse(
+			notificationId = UUID.randomUUID(),
+			familyId = null,
+			type = NotificationEventType.TODO_ASSIGNED,
+			title = "할 일",
+			body = "엄마님이 할 일을 맡겼어요",
+			targetType = null,
+			targetId = null,
+			isRead = false,
+			createdAt = LocalDateTime.now(),
+		)
+
+		sseEmitterRegistry.send(accountId, "notification", notification)
+		sseEmitterRegistry.send(accountId, "notification", notification)
 	}
 
 	@Test

@@ -94,15 +94,15 @@ class FamilyInvitationControllerTest @Autowired constructor(
 		header("Authorization", "Bearer ${accessToken(accountId)}")
 	}
 
-	private fun accept(invitationId: Any, accountId: UUID = inviteeId) = mockMvc.post("/api/v1/family-invitation/$invitationId/accept") {
+	private fun accept(invitationId: String, accountId: UUID = inviteeId) = mockMvc.post("/api/v1/family-invitation/$invitationId/accept") {
 		header("Authorization", "Bearer ${accessToken(accountId)}")
 	}
 
-	private fun decline(invitationId: Any, accountId: UUID = inviteeId) = mockMvc.post("/api/v1/family-invitation/$invitationId/decline") {
+	private fun decline(invitationId: String, accountId: UUID = inviteeId) = mockMvc.post("/api/v1/family-invitation/$invitationId/decline") {
 		header("Authorization", "Bearer ${accessToken(accountId)}")
 	}
 
-	private fun cancel(familyId: UUID, invitationId: Any, accountId: UUID = ownerId) =
+	private fun cancel(familyId: UUID, invitationId: String, accountId: UUID = ownerId) =
 		mockMvc.delete("/api/v1/family/$familyId/invitation/$invitationId") { header("Authorization", "Bearer ${accessToken(accountId)}") }
 
 	private fun expiredInvitation(familyId: UUID) = requireNotNull(
@@ -243,8 +243,8 @@ class FamilyInvitationControllerTest @Autowired constructor(
 
 		accept(invitationId, accountId = memberId).andExpect { status { isNotFound() } }
 		decline(invitationId, accountId = memberId).andExpect { status { isNotFound() } }
-		accept(expiredId).andExpect { status { isNotFound() } }
-		accept(UUID.randomUUID()).andExpect { status { isNotFound() } }
+		accept(expiredId.toString()).andExpect { status { isNotFound() } }
+		accept(UUID.randomUUID().toString()).andExpect { status { isNotFound() } }
 	}
 
 	@Test
@@ -279,7 +279,7 @@ class FamilyInvitationControllerTest @Autowired constructor(
 			FamilyInvitation(familyId = neighborFamilyId, inviterAccountId = neighborOwner, inviteeAccountId = inviteeId, expiresAt = LocalDateTime.now().plusHours(1)),
 		).familyInvitationId
 
-		cancel(familyId, requireNotNull(neighborInvitationId)).andExpect { status { isNotFound() } }
+		cancel(familyId, requireNotNull(neighborInvitationId).toString()).andExpect { status { isNotFound() } }
 
 		assertEquals(1, familyInvitationRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(neighborFamilyId).size)
 	}

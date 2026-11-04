@@ -39,15 +39,15 @@ class AccountInternalGrpcControllerTest @Autowired constructor(
 			).accountId,
 		)
 
-	private fun getNicknames(vararg accountIds: Any) =
-		stub.getNicknames(GetNicknamesRequest.newBuilder().addAllAccountIds(accountIds.map { it.toString() }).build()).nicknamesMap
+	private fun getNicknames(vararg accountIds: String) =
+		stub.getNicknames(GetNicknamesRequest.newBuilder().addAllAccountIds(accountIds.toList()).build()).nicknamesMap
 
 	@Test
 	fun `계정별 닉네임을 돌려준다`() {
 		val mom = saveAccount("mom@ieum.com", "엄마")
 		val dad = saveAccount("dad@ieum.com", "아빠")
 
-		assertEquals(mapOf(mom.toString() to "엄마", dad.toString() to "아빠"), getNicknames(mom, dad))
+		assertEquals(mapOf(mom.toString() to "엄마", dad.toString() to "아빠"), getNicknames(mom.toString(), dad.toString()))
 	}
 
 	@Test
@@ -58,7 +58,7 @@ class AccountInternalGrpcControllerTest @Autowired constructor(
 		).apply { delete() }
 		accountRepository.save(left)
 
-		assertEquals(mapOf(mom.toString() to "엄마"), getNicknames(mom, requireNotNull(left.accountId), UUID.randomUUID()))
+		assertEquals(mapOf(mom.toString() to "엄마"), getNicknames(mom.toString(), requireNotNull(left.accountId).toString(), UUID.randomUUID().toString()))
 	}
 
 	@Test
