@@ -158,6 +158,18 @@ class GroceryItemControllerTest @Autowired constructor(
 	}
 
 	@Test
+	fun `가족을 떠나면 그 가족에 둔 내 개인 물건도 보거나 고칠 수 없다`() {
+		val privateItemId = createId(item("내 간식", visibility = "PRIVATE"))
+		`when`(familyClient.isMember(familyId, me)).thenReturn(false)
+
+		get("/api/v1/grocery/item/$privateItemId").andExpect { status { isNotFound() } }
+		update(privateItemId, """{"storageId":"$fridgeId","name":"내 간식","category":"DAIRY","quantity":1}""")
+			.andExpect { status { isNotFound() } }
+		mockMvc.delete("/api/v1/grocery/item/$privateItemId") { header("Authorization", "Bearer ${accessToken(me)}") }
+			.andExpect { status { isNotFound() } }
+	}
+
+	@Test
 	fun `수정은 보낸 값으로 바꾸고 null 은 지우며 같은 가족 장소로만 옮긴다`() {
 		val itemId = createId(item("우유", expiryDate = "2026-11-04", extra = ""","purchasePrice":2800"""))
 
