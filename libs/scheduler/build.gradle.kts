@@ -11,6 +11,7 @@ dependencyManagement {
 }
 
 dependencies {
+	implementation(project(":libs:web"))
 	api("net.javacrumbs.shedlock:shedlock-spring:7.10.1")
 	implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:7.10.1")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")

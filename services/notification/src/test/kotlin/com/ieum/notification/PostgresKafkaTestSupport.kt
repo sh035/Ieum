@@ -1,68 +1,26 @@
 package com.ieum.notification
 
+import com.ieum.test.IeumTestSupport
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
-import org.springframework.security.oauth2.jwt.JwtClaimsSet
-import org.springframework.security.oauth2.jwt.JwtEncoderParameters
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.kafka.KafkaContainer
-import org.testcontainers.postgresql.PostgreSQLContainer
-import org.testcontainers.utility.MountableFile
-import java.security.KeyPairGenerator
-import java.security.interfaces.RSAPrivateKey
-import java.security.interfaces.RSAPublicKey
-import java.time.Instant
-import java.util.Base64
-import java.util.UUID
 
-abstract class PostgresKafkaTestSupport {
+abstract class PostgresKafkaTestSupport : IeumTestSupport() {
 
 	companion object {
-		// 테스트 클래스마다 컨테이너를 내리면 캐시된 Spring 컨텍스트가 죽은 포트를 바라보므로 JVM 동안 하나만 띄운다.
-		@ServiceConnection
-		@JvmStatic
-		val postgres = PostgreSQLContainer("postgres:18")
-			.withDatabaseName("ieum")
-			.withCopyFileToContainer(
-				MountableFile.forHostPath("../../infra/docker/schema.sql"),
-				"/docker-entrypoint-initdb.d/schema.sql",
-			)
-			.apply { start() }
-
 		@ServiceConnection
 		@JvmStatic
 		val kafka = KafkaContainer("apache/kafka:4.1.1").apply { start() }
 
-		private val keyPair = KeyPairGenerator.getInstance("RSA")
-			.apply { initialize(2048) }
-			.generateKeyPair()
-
-		// account가 발급하는 토큰과 같은 형태로 서명한다.
-		private val jwtEncoder = NimbusJwtEncoder
-			.withKeyPair(keyPair.public as RSAPublicKey, keyPair.private as RSAPrivateKey)
-			.build()
-
 		@JvmStatic
 		@DynamicPropertySource
-		fun jwtKeys(registry: DynamicPropertyRegistry) {
-			registry.add("jwt.public-key") { Base64.getEncoder().encodeToString(keyPair.public.encoded) }
+		fun notificationProperties(registry: DynamicPropertyRegistry) {
 			// 테스트 중 실제 시계로 스케줄이 돌면 락을 먼저 잡아 테스트 호출이 건너뛰어진다.
 			registry.add("notification.scheduler.briefing-cron") { "-" }
 			// 테스트는 .env 를 읽지 않는다. 채널은 처음 호출할 때 연결하므로 주소만 채운다.
 			registry.add("spring.grpc.client.channel.planner.target") { "localhost:9083" }
 			registry.add("spring.grpc.client.channel.grocery.target") { "localhost:9084" }
-		}
-
-		fun accessToken(accountId: UUID): String {
-			val now = Instant.now()
-			val claims = JwtClaimsSet.builder()
-				.subject(accountId.toString())
-				.issuedAt(now)
-				.expiresAt(now.plusSeconds(1800))
-				.build()
-
-			return jwtEncoder.encode(JwtEncoderParameters.from(claims)).tokenValue
 		}
 	}
 }

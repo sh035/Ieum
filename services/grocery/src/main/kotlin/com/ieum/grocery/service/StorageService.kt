@@ -1,6 +1,7 @@
 package com.ieum.grocery.service
 
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.grpc.client.family.requireMember
 import com.ieum.grocery.controller.dto.request.CreateStorageRequest
 import com.ieum.grocery.controller.dto.request.UpdateStorageRequest
 import com.ieum.grocery.controller.dto.response.StorageResponse
@@ -27,7 +28,7 @@ class StorageService(
 	// 처음 쓸 때 여러 장소를 한 번에 만든다. 요청 안의 중복 이름은 하나로 합친다.
 	@Transactional
 	fun createStorages(accountId: String, request: CreateStorageRequest): List<StorageResponse> {
-		checkMember(request.familyId, UUID.fromString(accountId))
+		familyClient.requireMember(request.familyId, UUID.fromString(accountId), GroceryErrorCode.FAMILY_NOT_FOUND)
 
 		val names = request.names.map { it.trim() }.distinct()
 		if (names.any { it.isEmpty() || it.length > MAX_NAME_LENGTH }) {
@@ -48,7 +49,7 @@ class StorageService(
 	}
 
 	fun getStorages(accountId: String, familyId: UUID): List<StorageResponse> {
-		checkMember(familyId, UUID.fromString(accountId))
+		familyClient.requireMember(familyId, UUID.fromString(accountId), GroceryErrorCode.FAMILY_NOT_FOUND)
 
 		return storageRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId).map { it.toResponse() }
 	}
@@ -76,17 +77,9 @@ class StorageService(
 		val storage = storageRepository.findByStorageIdAndIsDeletedFalse(storageId)
 			?: throw IeumException(GroceryErrorCode.STORAGE_NOT_FOUND)
 
-		if (!familyClient.isMember(storage.familyId, me)) {
-			throw IeumException(GroceryErrorCode.STORAGE_NOT_FOUND)
-		}
+		familyClient.requireMember(storage.familyId, me, GroceryErrorCode.STORAGE_NOT_FOUND)
 
 		return storage
-	}
-
-	private fun checkMember(familyId: UUID, accountId: UUID) {
-		if (!familyClient.isMember(familyId, accountId)) {
-			throw IeumException(GroceryErrorCode.FAMILY_NOT_FOUND)
-		}
 	}
 
 	// 동시에 같은 이름을 만들면 앞선 확인을 함께 통과하므로 unique index 위반으로 걸러낸다.

@@ -5,6 +5,7 @@ import com.ieum.events.NotificationEventPublisher
 import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationTargetType
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.grpc.client.family.requireMember
 import com.ieum.planner.controller.dto.request.CreateScheduleRequest
 import com.ieum.planner.controller.dto.request.UpdateScheduleRequest
 import com.ieum.planner.controller.dto.response.ScheduleResponse
@@ -40,7 +41,7 @@ class ScheduleService(
 			Visibility.FAMILY -> request.familyId ?: throw IeumException(PlannerErrorCode.INVALID_VISIBILITY_FAMILY)
 			Visibility.PRIVATE -> request.familyId?.let { throw IeumException(PlannerErrorCode.INVALID_VISIBILITY_FAMILY) }
 		}
-		familyId?.let { checkMember(it, me) }
+		familyId?.let { familyClient.requireMember(it, me, PlannerErrorCode.FAMILY_NOT_FOUND) }
 
 		val attendees = if (request.isAllFamily) {
 			allFamily(familyId, request.attendeeAccountIds)
@@ -78,7 +79,7 @@ class ScheduleService(
 			throw IeumException(PlannerErrorCode.INVALID_DATE_RANGE)
 		}
 		val me = UUID.fromString(accountId)
-		familyId?.let { checkMember(it, me) }
+		familyId?.let { familyClient.requireMember(it, me, PlannerErrorCode.FAMILY_NOT_FOUND) }
 
 		return findSchedules(me, familyId, from, to)
 	}
@@ -230,12 +231,6 @@ class ScheduleService(
 			throw IeumException(PlannerErrorCode.INVALID_SCHEDULE_PERIOD)
 		}
 		return period
-	}
-
-	private fun checkMember(familyId: UUID, accountId: UUID) {
-		if (!familyClient.isMember(familyId, accountId)) {
-			throw IeumException(PlannerErrorCode.FAMILY_NOT_FOUND)
-		}
 	}
 
 	// 참석자는 일정 수와 상관없이 한 번에 조회한다.

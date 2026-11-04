@@ -1,6 +1,7 @@
 package com.ieum.grocery.service
 
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.grpc.client.family.requireMember
 import com.ieum.grocery.controller.dto.request.CreateGroceryItemRequest
 import com.ieum.grocery.controller.dto.request.UpdateGroceryItemRequest
 import com.ieum.grocery.controller.dto.response.GroceryItemResponse
@@ -55,9 +56,7 @@ class GroceryItemService(
 	@Transactional(readOnly = true)
 	fun getItems(accountId: String, familyId: UUID, storageId: UUID?): List<GroceryItemResponse> {
 		val me = UUID.fromString(accountId)
-		if (!familyClient.isMember(familyId, me)) {
-			throw IeumException(GroceryErrorCode.FAMILY_NOT_FOUND)
-		}
+		familyClient.requireMember(familyId, me, GroceryErrorCode.FAMILY_NOT_FOUND)
 		storageId?.let {
 			if (storageRepository.findByStorageIdAndIsDeletedFalse(it)?.familyId != familyId) {
 				throw IeumException(GroceryErrorCode.STORAGE_NOT_FOUND)

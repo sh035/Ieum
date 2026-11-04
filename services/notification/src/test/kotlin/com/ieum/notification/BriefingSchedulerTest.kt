@@ -14,7 +14,7 @@ import com.ieum.notification.repository.NotificationRepository
 import com.ieum.notification.scheduler.BriefingScheduler
 import com.ieum.notification.service.NotificationMessage
 import com.ieum.notification.service.NotificationService
-import com.ieum.scheduler.SchedulerConfig
+import com.ieum.web.config.TimeZoneConfig
 import com.ieum.web.exception.IeumException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -48,7 +48,7 @@ class BriefingSchedulerTest @Autowired constructor(
 	class TestClock {
 		@Bean
 		@Primary
-		fun fixedClock(): Clock = Clock.fixed(LocalDateTime.of(2026, 10, 30, 9, 0).atZone(SchedulerConfig.SEOUL).toInstant(), SchedulerConfig.SEOUL)
+		fun fixedClock(): Clock = Clock.fixed(LocalDateTime.of(2026, 10, 30, 9, 0).atZone(TimeZoneConfig.SEOUL).toInstant(), TimeZoneConfig.SEOUL)
 	}
 
 	@MockitoBean

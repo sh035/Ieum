@@ -15,4 +15,5 @@ include(
 	"libs:grpc-server",
 	"libs:events",
 	"libs:scheduler",
+	"libs:test-support",
 )

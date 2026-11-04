@@ -13,6 +13,7 @@ dependencies {
 	implementation(project(":libs:web"))
 	implementation("org.springframework:spring-web")
 	api("org.springframework.boot:spring-boot-starter-grpc-server")
+	implementation("org.springframework.security:spring-security-config")
 
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")

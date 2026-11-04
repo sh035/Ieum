@@ -5,6 +5,7 @@ import com.ieum.events.NotificationEventPublisher
 import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationTargetType
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.grpc.client.family.requireMember
 import com.ieum.planner.controller.dto.request.CreateTodoRequest
 import com.ieum.planner.controller.dto.request.UpdateTodoRequest
 import com.ieum.planner.controller.dto.response.TodoChecklistItemResponse
@@ -52,7 +53,7 @@ class TodoService(
 				Visibility.FAMILY -> request.familyId ?: throw IeumException(PlannerErrorCode.INVALID_VISIBILITY_FAMILY)
 				Visibility.PRIVATE -> request.familyId?.let { throw IeumException(PlannerErrorCode.INVALID_VISIBILITY_FAMILY) }
 			}
-			familyId?.let { checkMember(it, me) }
+			familyId?.let { familyClient.requireMember(it, me, PlannerErrorCode.FAMILY_NOT_FOUND) }
 			familyId to visibility
 		}
 
@@ -82,7 +83,7 @@ class TodoService(
 	fun getTodos(accountId: String, familyId: UUID?): List<TodoResponse> {
 		val me = UUID.fromString(accountId)
 		val familyTodos = familyId?.let {
-			checkMember(it, me)
+			familyClient.requireMember(it, me, PlannerErrorCode.FAMILY_NOT_FOUND)
 			todoRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(it)
 		}.orEmpty()
 		val privateTodos =
@@ -96,7 +97,7 @@ class TodoService(
 	fun getMatrix(accountId: String, familyId: UUID?): TodoMatrixResponse {
 		val me = UUID.fromString(accountId)
 		val familyTodos = familyId?.let {
-			checkMember(it, me)
+			familyClient.requireMember(it, me, PlannerErrorCode.FAMILY_NOT_FOUND)
 			todoRepository.findAllByFamilyIdAndAssigneeAccountIdAndIsCompletedFalseAndIsDeletedFalse(it, me)
 		}.orEmpty()
 		val privateTodos =
@@ -255,12 +256,6 @@ class TodoService(
 				dedupKey = dedupKey,
 			),
 		)
-	}
-
-	private fun checkMember(familyId: UUID, accountId: UUID) {
-		if (!familyClient.isMember(familyId, accountId)) {
-			throw IeumException(PlannerErrorCode.FAMILY_NOT_FOUND)
-		}
 	}
 
 	private fun checkDueTime(dueDate: LocalDate?, dueTime: LocalTime?) {

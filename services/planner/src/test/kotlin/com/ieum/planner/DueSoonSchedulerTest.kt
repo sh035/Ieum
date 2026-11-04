@@ -16,7 +16,7 @@ import com.ieum.planner.repository.TodoChecklistItemRepository
 import com.ieum.planner.repository.TodoRepository
 import com.ieum.planner.scheduler.DueSoonScheduler
 import com.ieum.planner.service.DueSoonService
-import com.ieum.scheduler.SchedulerConfig
+import com.ieum.web.config.TimeZoneConfig
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -54,9 +54,9 @@ class DueSoonSchedulerTest @Autowired constructor(
 
 	// 회차마다 시각을 옮겨 가며 이어서 처리하는지 본다.
 	class MovableClock(var now: LocalDateTime) : Clock() {
-		override fun getZone(): ZoneId = SchedulerConfig.SEOUL
+		override fun getZone(): ZoneId = TimeZoneConfig.SEOUL
 		override fun withZone(zone: ZoneId): Clock = this
-		override fun instant(): Instant = now.atZone(SchedulerConfig.SEOUL).toInstant()
+		override fun instant(): Instant = now.atZone(TimeZoneConfig.SEOUL).toInstant()
 	}
 
 	@TestConfiguration

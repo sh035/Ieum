@@ -11,7 +11,7 @@ dependencyManagement {
 
 dependencies {
 	api(project(":libs:proto"))
-	implementation(project(":libs:web"))
+	api(project(":libs:web"))
 	implementation("org.springframework:spring-web")
 	api("org.springframework.boot:spring-boot-starter-grpc-client")
 

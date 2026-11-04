@@ -1,5 +1,6 @@
 package com.ieum.notification.service.delivery
 
+import com.ieum.notification.controller.dto.response.NotificationResponse
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.ContextClosedEvent
 import org.springframework.context.event.EventListener
@@ -34,7 +35,7 @@ class SseEmitterRegistry {
 		emitters.values.flatten().forEach { it.complete() }
 	}
 
-	fun send(accountId: UUID, name: String, data: Any) {
+	fun send(accountId: UUID, name: String, data: NotificationResponse) {
 		emitters[accountId]?.forEach { emitter -> trySend(accountId, emitter, SseEmitter.event().name(name).data(data)) }
 	}
 
