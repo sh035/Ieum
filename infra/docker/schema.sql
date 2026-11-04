@@ -56,9 +56,10 @@ CREATE UNIQUE INDEX uk_family_member_family_id_account_id
 CREATE INDEX idx_family_member_account_id ON family.family_member (account_id);
 
 -- 특정 계정에게 보낸 가족 초대
--- - OWNER 가 이메일로 찾은 계정에게만 보내고, 그 계정만 수락하거나 거절할 수 있다
+-- - OWNER 가 지정한 계정에게 보내고, 그 계정만 수락하거나 거절할 수 있다
 -- - 만든 뒤 1시간 동안 유효하다
--- - 수락 / 거절 / 취소하면 is_deleted 로 끝낸다. 만료된 초대는 같은 사람을 다시 초대할 때 정리한다
+-- - 수락 / 거절 / 취소하거나 혼자 남은 OWNER 가 나가 가족이 삭제되면 is_deleted 로 끝낸다
+-- - 만료된 초대는 같은 사람을 다시 초대할 때 정리한다
 CREATE TABLE family.family_invitation
 (
 	family_invitation_id uuid PRIMARY KEY,     -- 초대 ID
@@ -68,7 +69,7 @@ CREATE TABLE family.family_invitation
 	expires_at           timestamp(6) NOT NULL, -- 만료 시각 (만든 시각 + 1시간)
 	created_at           timestamp(6) NOT NULL, -- 만든 시각
 	updated_at           timestamp(6),          -- 마지막 수정 시각
-	is_deleted           boolean      NOT NULL DEFAULT false -- 수락 / 거절 / 취소로 끝났는지
+	is_deleted           boolean      NOT NULL DEFAULT false -- 수락 / 거절 / 취소 / 가족 삭제 / 만료 정리로 끝났는지
 );
 
 -- 같은 가족이 같은 사람에게 보낸 살아 있는 초대는 하나만 둔다.
@@ -265,7 +266,7 @@ CREATE INDEX idx_grocery_item_storage_id ON grocery.grocery_item (storage_id);
 CREATE INDEX idx_grocery_item_family_id ON grocery.grocery_item (family_id);
 
 -- 영수증 원문을 가족이 확정한 이름 / 카테고리 / 장소로 기억한다
--- - 다음 영수증 인식 때 기본값으로 쓴다
+-- - 영수증 인식 기능에서 기본값으로 쓸 예정이다 (아직 쓰는 곳 없음)
 CREATE TABLE grocery.receipt_item_mapping
 (
 	receipt_item_mapping_id uuid PRIMARY KEY,  -- 매핑 ID

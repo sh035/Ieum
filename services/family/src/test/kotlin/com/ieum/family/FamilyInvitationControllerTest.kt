@@ -7,7 +7,9 @@ import com.ieum.family.domain.enums.FamilyRole
 import com.ieum.family.repository.FamilyInvitationRepository
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
+import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.account.AccountProfile
+import com.ieum.web.exception.IeumException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.doAnswer
@@ -302,5 +304,31 @@ class FamilyInvitationControllerTest @Autowired constructor(
 		executor.shutdown()
 
 		assertEquals(null, familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeId))
+	}
+
+	@Test
+	fun `잘못된 요청은 400`() {
+		val familyId = createFamily()
+
+		mockMvc.post("/api/v1/family/$familyId/invitation") {
+			header("Authorization", "Bearer ${accessToken(ownerId)}")
+			contentType = MediaType.APPLICATION_JSON
+			content = "{}"
+		}.andExpect { status { isBadRequest() } }
+		mockMvc.post("/api/v1/family/$familyId/invitation") {
+			header("Authorization", "Bearer ${accessToken(ownerId)}")
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"inviteeAccountId":"not-a-uuid"}"""
+		}.andExpect { status { isBadRequest() } }
+		mockMvc.get("/api/v1/family/$familyId/invitation/candidate") { header("Authorization", "Bearer ${accessToken(ownerId)}") }
+			.andExpect { status { isBadRequest() } }
+	}
+
+	@Test
+	fun `account 가 응답하지 않으면 503`() {
+		val familyId = createFamily()
+		`when`(accountClient.findByEmail("kid@ieum.com")).thenThrow(IeumException(GrpcClientErrorCode.ACCOUNT_SERVICE_UNAVAILABLE))
+
+		findCandidate(familyId, "kid@ieum.com").andExpect { status { isServiceUnavailable() } }
 	}
 }

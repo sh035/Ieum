@@ -51,14 +51,15 @@ class FamilyInvitationService(
 	// 같은 사람에게 살아 있는 초대가 있으면 새로 만들지 않는다. 만료된 초대는 지우고 다시 만든다.
 	@Transactional
 	fun createInvitation(accountId: String, familyId: UUID, inviteeAccountId: UUID): FamilyInvitationResponse {
+		// account 가 느려도 같은 가족의 다른 요청이 기다리지 않게 잠그기 전에 계정을 확인한다.
+		val nickname = accountClient.getNicknames(setOf(inviteeAccountId))[inviteeAccountId]
+			?: throw IeumException(FamilyErrorCode.INVITEE_NOT_FOUND)
 		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
 		val owner = checkOwner(accountId, familyId)
 
 		if (familyMemberRepository.existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeAccountId)) {
 			throw IeumException(FamilyErrorCode.ALREADY_FAMILY_MEMBER)
 		}
-		val nickname = accountClient.getNicknames(setOf(inviteeAccountId))[inviteeAccountId]
-			?: throw IeumException(FamilyErrorCode.INVITEE_NOT_FOUND)
 		familyInvitationRepository.findByFamilyIdAndInviteeAccountIdAndIsDeletedFalse(familyId, inviteeAccountId)?.let {
 			if (!it.isExpired()) {
 				throw IeumException(FamilyErrorCode.INVITATION_ALREADY_EXISTS)
