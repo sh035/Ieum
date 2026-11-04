@@ -19,6 +19,9 @@ spring:
       properties:
         # Kafka 장애가 API 지연으로 번지지 않게 발행 대기를 2초로 끊는다.
         max.block.ms: 2000
+        # outbox 전송 대기(5초)가 끝난 뒤 프로듀서가 혼자 재시도해 같은 이벤트가 쌓이지 않게 맞춘다.
+        request.timeout.ms: 4000
+        delivery.timeout.ms: 5000
 
 server:
   port: 8082
@@ -28,3 +31,9 @@ spring.grpc.server.port: 9082
 
 jwt:
   public-key: ${JWT_PUBLIC_KEY}
+
+family:
+  scheduler:
+    # 나가기 / 내보내기 뒤 다른 서비스의 정리가 늦지 않게 매초 보낸다.
+    outbox-relay-cron: "* * * * * *"
+    outbox-cleanup-cron: "0 0 4 * * *"

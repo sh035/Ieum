@@ -1,5 +1,7 @@
 package com.ieum.family.service
 
+import com.ieum.events.FamilyEventData
+import com.ieum.events.FamilyEventType
 import com.ieum.events.NotificationEventData
 import com.ieum.events.NotificationEventPublisher
 import com.ieum.events.NotificationEventType
@@ -22,6 +24,7 @@ class FamilyMemberService(
 	private val familyRepository: FamilyRepository,
 	private val familyMemberRepository: FamilyMemberRepository,
 	private val notificationEventPublisher: NotificationEventPublisher,
+	private val familyEventPublisher: FamilyEventPublisher,
 ) {
 
 	// 가입한 순서대로 반환한다. 구성원이 아니면 가족의 존재 자체를 숨긴다.
@@ -83,6 +86,7 @@ class FamilyMemberService(
 
 		member.delete()
 
+		familyEventPublisher.publish(FamilyEventType.FAMILY_MEMBER_LEFT, FamilyEventData(familyId = familyId, accountId = member.accountId))
 		notificationEventPublisher.publish(
 			NotificationEventType.FAMILY_MEMBER_REMOVED,
 			NotificationEventData(recipientAccountIds = listOf(member.accountId), familyId = familyId, actorAccountId = owner.accountId),

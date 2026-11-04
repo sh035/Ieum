@@ -62,6 +62,46 @@ CREATE UNIQUE INDEX uk_family_invitation_family_id
 	ON family.family_invitation (family_id)
 	WHERE is_deleted = false;
 
+-- 다른 서비스로 보낼 가족 이벤트 (Transactional Outbox)
+-- - 나가기 / 내보내기 / 가족 삭제와 같은 트랜잭션에 저장해 커밋된 변경만 보낸다
+-- - 스케줄러가 sent_at 이 빈 행을 오래된 순으로 Kafka 에 보내고 sent_at 을 채운다
+-- - 보내기에 실패하면 그 행에서 멈추고 다음 주기에 다시 보낸다
+-- - 보낸 뒤 sent_at 을 채우기 전에 서버가 죽으면 다시 보내므로 받는 쪽은 같은 이벤트를 두 번 받아도 결과가 같아야 한다
+-- - 보낸 지 7일이 지난 행은 매일 지운다
+-- - 인프라 테이블이라 공통 컬럼 규칙을 따르지 않는다
+CREATE TABLE family.outbox_event
+(
+	outbox_event_id uuid PRIMARY KEY,
+	event_type      varchar(64)  NOT NULL,
+	family_id       uuid         NOT NULL,
+	payload         text         NOT NULL,
+	created_at      timestamp(6) NOT NULL,
+	sent_at         timestamp(6)
+);
+
+-- 보낼 이벤트 조회용
+CREATE INDEX idx_outbox_event_created_at ON family.outbox_event (created_at, outbox_event_id) WHERE sent_at IS NULL;
+
+-- ShedLock 이 관리하는 스케줄 작업 락
+-- - Pod 가 여러 개여도 outbox 전송과 정리는 한 Pod 에서만 돈다 (한 주기가 최대 잠금 시간 1분 안에 끝나도록 나눠 보낸다)
+-- - 라이브러리 표준 형식이라 공통 컬럼 규칙을 따르지 않는다
+CREATE TABLE family.shedlock
+(
+	name       varchar(64)  NOT NULL PRIMARY KEY,
+	lock_until timestamp(6) NOT NULL,
+	locked_at  timestamp(6) NOT NULL,
+	locked_by  varchar(255) NOT NULL
+);
+
+-- libs:scheduler 엔티티 검증용 빈 테이블
+-- - family 는 체크포인트를 쓰지 않는다
+-- - 인프라 테이블이라 공통 컬럼 규칙을 따르지 않는다
+CREATE TABLE family.scheduler_checkpoint
+(
+	name            varchar(64)  NOT NULL PRIMARY KEY,
+	processed_until timestamp(6) NOT NULL
+);
+
 -- PRIVATE 할 일은 가족에 속하지 않는다.
 CREATE TABLE planner.todo
 (

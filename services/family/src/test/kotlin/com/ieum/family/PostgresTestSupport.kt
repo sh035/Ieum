@@ -49,6 +49,8 @@ abstract class PostgresTestSupport {
 		fun jwtKeys(registry: DynamicPropertyRegistry) {
 			registry.add("jwt.public-key") { Base64.getEncoder().encodeToString(keyPair.public.encoded) }
 			registry.add("spring.kafka.bootstrap-servers") { "localhost:9092" }
+			registry.add("family.scheduler.outbox-relay-cron") { "-" }
+			registry.add("family.scheduler.outbox-cleanup-cron") { "-" }
 		}
 
 		fun accessToken(accountId: UUID): String {
