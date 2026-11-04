@@ -10,7 +10,9 @@ import com.ieum.family.repository.FamilyRepository
 import com.ieum.grpc.client.account.AccountProfile
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.doReturn
+import org.mockito.Mockito.mockingDetails
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -24,6 +26,8 @@ import org.springframework.test.web.servlet.post
 import tools.jackson.databind.ObjectMapper
 import java.time.LocalDateTime
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
 
 @SpringBootTest
@@ -38,6 +42,9 @@ class FamilyInvitationControllerTest @Autowired constructor(
 
 	@MockitoSpyBean
 	private lateinit var familyMemberRepositorySpy: FamilyMemberRepository
+
+	@MockitoSpyBean
+	private lateinit var familyRepositorySpy: FamilyRepository
 
 	private val ownerId = UUID.randomUUID()
 	private val memberId = UUID.randomUUID()
@@ -92,6 +99,9 @@ class FamilyInvitationControllerTest @Autowired constructor(
 	private fun decline(invitationId: Any, accountId: UUID = inviteeId) = mockMvc.post("/api/v1/family-invitation/$invitationId/decline") {
 		header("Authorization", "Bearer ${accessToken(accountId)}")
 	}
+
+	private fun cancel(familyId: UUID, invitationId: Any, accountId: UUID = ownerId) =
+		mockMvc.delete("/api/v1/family/$familyId/invitation/$invitationId") { header("Authorization", "Bearer ${accessToken(accountId)}") }
 
 	private fun expiredInvitation(familyId: UUID) = requireNotNull(
 		familyInvitationRepository.save(
@@ -173,7 +183,9 @@ class FamilyInvitationControllerTest @Autowired constructor(
 	fun `OWNER는 보낸 초대를 보고 취소한다`() {
 		val familyId = createFamily()
 		val invitationId = inviteId(familyId)
-		expiredInvitation(createFamily("옆집"))
+		familyInvitationRepository.save(
+			FamilyInvitation(familyId = familyId, inviterAccountId = ownerId, inviteeAccountId = memberId, expiresAt = LocalDateTime.now().minusMinutes(1)),
+		)
 
 		getSent(familyId).andExpect {
 			status { isOk() }
@@ -181,8 +193,7 @@ class FamilyInvitationControllerTest @Autowired constructor(
 			jsonPath("\$.data[0].familyInvitationId") { value(invitationId) }
 			jsonPath("\$.data[0].inviteeNickname") { value("막내") }
 		}
-		mockMvc.delete("/api/v1/family/$familyId/invitation/$invitationId") { header("Authorization", "Bearer ${accessToken(ownerId)}") }
-			.andExpect { status { isNoContent() } }
+		cancel(familyId, invitationId).andExpect { status { isNoContent() } }
 
 		getSent(familyId).andExpect { jsonPath("\$.data.length()") { value(0) } }
 		accept(invitationId).andExpect { status { isNotFound() } }
@@ -254,5 +265,42 @@ class FamilyInvitationControllerTest @Autowired constructor(
 		getReceived().andExpect { jsonPath("\$.data.length()") { value(0) } }
 		accept(invitationId).andExpect { status { isNotFound() } }
 		invite(familyId).andExpect { status { isCreated() } }
+	}
+
+	@Test
+	fun `다른 가족의 초대는 취소할 수 없다`() {
+		val familyId = createFamily()
+		val neighborOwner = UUID.randomUUID()
+		val neighborFamilyId = requireNotNull(familyRepository.save(Family(name = "옆집")).familyId)
+		familyMemberRepository.save(FamilyMember(familyId = neighborFamilyId, accountId = neighborOwner, role = FamilyRole.OWNER))
+		val neighborInvitationId = familyInvitationRepository.save(
+			FamilyInvitation(familyId = neighborFamilyId, inviterAccountId = neighborOwner, inviteeAccountId = inviteeId, expiresAt = LocalDateTime.now().plusHours(1)),
+		).familyInvitationId
+
+		cancel(familyId, requireNotNull(neighborInvitationId)).andExpect { status { isNotFound() } }
+
+		assertEquals(1, familyInvitationRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(neighborFamilyId).size)
+	}
+
+	@Test
+	fun `수락 도중 OWNER가 취소하면 가입되지 않는다`() {
+		val familyId = createFamily()
+		val invitationId = inviteId(familyId)
+		val executor = Executors.newSingleThreadExecutor()
+		val hooked = AtomicBoolean(false)
+		// 수락이 초대를 읽은 뒤 가족을 잠그기 직전에 취소가 먼저 끝나게 한다.
+		// Spring Data 리포지토리 spy 는 원래 빈에 위임하는 기본 응답으로 만들어져서 그 응답으로 원래 동작을 부른다.
+		val delegateToReal = mockingDetails(familyRepositorySpy).mockCreationSettings.defaultAnswer
+		doAnswer {
+			if (hooked.compareAndSet(false, true)) {
+				executor.submit { cancel(familyId, invitationId).andExpect { status { isNoContent() } } }.get()
+			}
+			delegateToReal.answer(it)
+		}.`when`(familyRepositorySpy).findWithLockByFamilyIdAndIsDeletedFalse(familyId)
+
+		accept(invitationId).andExpect { status { isNotFound() } }
+		executor.shutdown()
+
+		assertEquals(null, familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeId))
 	}
 }

@@ -105,6 +105,7 @@ class FamilyInvitationService(
 
 	@Transactional
 	fun cancelInvitation(accountId: String, familyId: UUID, familyInvitationId: UUID) {
+		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
 		checkOwner(accountId, familyId)
 
 		val invitation = familyInvitationRepository.findByFamilyInvitationIdAndFamilyIdAndIsDeletedFalse(familyInvitationId, familyId)
@@ -139,11 +140,12 @@ class FamilyInvitationService(
 	@Transactional
 	fun acceptInvitation(accountId: String, familyInvitationId: UUID): FamilyResponse {
 		val me = UUID.fromString(accountId)
-		val invitation = findReceivedInvitation(me, familyInvitationId)
-		val familyId = invitation.familyId
+		val familyId = findReceivedInvitation(me, familyInvitationId).familyId
 		// 혼자 남은 OWNER 가 동시에 나가 가족이 삭제되면 여기서 걸러낸다.
 		val family = familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId)
 			?: throw IeumException(FamilyErrorCode.INVITATION_NOT_FOUND)
+		// 잠그기 전에 취소나 거절이 끝났을 수 있어 잠근 뒤 다시 확인한다.
+		val invitation = findReceivedInvitation(me, familyInvitationId)
 
 		if (familyMemberRepository.existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, me)) {
 			throw IeumException(FamilyErrorCode.ALREADY_FAMILY_MEMBER)
@@ -176,6 +178,8 @@ class FamilyInvitationService(
 	@Transactional
 	fun declineInvitation(accountId: String, familyInvitationId: UUID) {
 		val me = UUID.fromString(accountId)
+		val familyId = findReceivedInvitation(me, familyInvitationId).familyId
+		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.INVITATION_NOT_FOUND)
 		val invitation = findReceivedInvitation(me, familyInvitationId)
 		invitation.delete()
 
