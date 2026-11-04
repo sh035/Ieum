@@ -12,7 +12,7 @@ class ExpenseFamilyEventReceiver(
 	private val familyEventService: FamilyEventService,
 ) : FamilyEventReceiver(objectMapper) {
 
-	// 지출은 이미 쓴 돈의 기록이라 구성원이 떠나도 가족 기록으로 남긴다.
+	// 지출은 이미 쓴 돈의 기록이라 구성원이 떠나도 지우지 않는다. 개인 지출 / 예산은 다시 들어오면 이어 보인다.
 	override fun onMemberLeft(familyId: UUID, accountId: UUID, leftAt: LocalDateTime) = Unit
 
 	override fun onFamilyDeleted(familyId: UUID) = familyEventService.deleteFamily(familyId)

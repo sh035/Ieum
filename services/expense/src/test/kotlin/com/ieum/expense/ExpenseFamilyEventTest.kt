@@ -62,12 +62,12 @@ class ExpenseFamilyEventTest @Autowired constructor(
 		).expenseId,
 	)
 
-	private fun budget(familyId: UUID, accountId: UUID?) = requireNotNull(
-		budgetRepository.save(Budget(familyId = familyId, accountId = accountId, budgetMonth = null, amount = 500000)).budgetId,
+	private fun budget(familyId: UUID, accountId: UUID?, budgetMonth: LocalDate? = null) = requireNotNull(
+		budgetRepository.save(Budget(familyId = familyId, accountId = accountId, budgetMonth = budgetMonth, amount = 500000)).budgetId,
 	)
 
 	private fun send(type: String, data: FamilyEventData) =
-		familyEventReceiver.receive(objectMapper.writeValueAsString(IeumEvent(UUID.randomUUID(), type, LocalDateTime.now().plusMinutes(1), data)))
+		familyEventReceiver.receive(objectMapper.writeValueAsString(IeumEvent(UUID.randomUUID(), type, LocalDateTime.now(), data)))
 
 	private fun expenseDeleted(expenseId: UUID) = expenseRepository.findById(expenseId).get().isDeleted
 
@@ -85,12 +85,15 @@ class ExpenseFamilyEventTest @Autowired constructor(
 		val otherHomeExpense = expense(otherHome, stayer, Visibility.FAMILY)
 		val familyBudget = budget(home, null)
 		val personalBudget = budget(home, stayer)
+		val monthlyBudget = budget(home, null, LocalDate.of(2026, 11, 1))
 		val otherHomeBudget = budget(otherHome, null)
 
 		send("FAMILY_DELETED", FamilyEventData(familyId = home))
 
 		assertEquals(listOf(true, true, false), listOf(familyExpense, privateExpense, otherHomeExpense).map { expenseDeleted(it) })
-		assertEquals(listOf(true, true, false), listOf(familyBudget, personalBudget, otherHomeBudget).map { budgetDeleted(it) })
+		// 한 문장으로 지워도 수정 시각을 남긴다.
+		assertEquals(listOf(true, true, false), listOf(familyExpense, privateExpense, otherHomeExpense).map { expenseRepository.findById(it).get().updatedAt != null })
+		assertEquals(listOf(true, true, true, false), listOf(familyBudget, personalBudget, monthlyBudget, otherHomeBudget).map { budgetDeleted(it) })
 	}
 
 	@Test
