@@ -1,6 +1,7 @@
 package com.ieum.notification.service
 
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.grpc.client.family.requireMember
 import com.ieum.notification.controller.dto.response.NotificationResponse
 import com.ieum.notification.controller.dto.response.UnreadCountResponse
 import com.ieum.notification.domain.entity.Notification
@@ -91,9 +92,7 @@ class NotificationInboxService(
 		if (familyId == null) {
 			throw IeumException(NotificationErrorCode.FAMILY_ID_REQUIRED)
 		}
-		if (!familyClient.isMember(familyId, me)) {
-			throw IeumException(NotificationErrorCode.FAMILY_NOT_FOUND)
-		}
+		familyClient.requireMember(familyId, me, NotificationErrorCode.FAMILY_NOT_FOUND)
 		return familyId
 	}
 }

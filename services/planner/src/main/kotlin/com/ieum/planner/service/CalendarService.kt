@@ -1,6 +1,7 @@
 package com.ieum.planner.service
 
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.grpc.client.family.requireMember
 import com.ieum.planner.controller.dto.response.CalendarResponse
 import com.ieum.planner.exception.PlannerErrorCode
 import com.ieum.web.exception.IeumException
@@ -28,9 +29,7 @@ class CalendarService(
 			throw IeumException(PlannerErrorCode.CALENDAR_RANGE_TOO_LONG)
 		}
 		val me = UUID.fromString(accountId)
-		if (familyId != null && !familyClient.isMember(familyId, me)) {
-			throw IeumException(PlannerErrorCode.FAMILY_NOT_FOUND)
-		}
+		familyId?.let { familyClient.requireMember(it, me, PlannerErrorCode.FAMILY_NOT_FOUND) }
 
 		return CalendarResponse(
 			todos = todoService.findTodosDueBetween(me, familyId, from, to),

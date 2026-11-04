@@ -5,6 +5,7 @@ import com.ieum.events.NotificationEventPublisher
 import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationTargetType
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.grpc.client.family.requireMember
 import com.ieum.expense.controller.dto.request.CreateExpenseRequest
 import com.ieum.expense.controller.dto.request.UpdateExpenseRequest
 import com.ieum.expense.controller.dto.response.ExpenseResponse
@@ -36,9 +37,7 @@ class ExpenseService(
 	@Transactional
 	fun createExpense(accountId: String, request: CreateExpenseRequest): ExpenseResponse {
 		val me = UUID.fromString(accountId)
-		if (!familyClient.isMember(request.familyId, me)) {
-			throw IeumException(ExpenseErrorCode.FAMILY_NOT_FOUND)
-		}
+		familyClient.requireMember(request.familyId, me, ExpenseErrorCode.FAMILY_NOT_FOUND)
 		val month = YearMonth.from(request.spentDate)
 		val before = familyTotal(request.familyId, month)
 
