@@ -13,4 +13,6 @@ interface BudgetRepository : JpaRepository<Budget, UUID> {
 		accountId: UUID?,
 		budgetMonth: LocalDate?,
 	): Budget?
+
+	fun findAllByFamilyIdAndIsDeletedFalse(familyId: UUID): List<Budget>
 }

@@ -130,6 +130,17 @@ class ExpenseControllerTest @Autowired constructor(
 	}
 
 	@Test
+	fun `가족을 떠나면 그 가족에 남긴 내 개인 지출도 보거나 고칠 수 없다`() {
+		val privateExpenseId = createId(expense(visibility = "PRIVATE"))
+		`when`(familyClient.isMember(familyId, me)).thenReturn(false)
+
+		get(privateExpenseId).andExpect { status { isNotFound() } }
+		update(privateExpenseId, me).andExpect { status { isNotFound() } }
+		mockMvc.delete("/api/v1/expense/$privateExpenseId") { header("Authorization", "Bearer ${accessToken(me)}") }
+			.andExpect { status { isNotFound() } }
+	}
+
+	@Test
 	fun `수정은 보낸 값으로 바꾸고 결제한 사람을 바꿀 때만 구성원을 확인한다`() {
 		val expenseId = createId(expense(payer = member, extra = ""","memo":"메모""""))
 		`when`(familyClient.isMember(familyId, member)).thenReturn(false)
