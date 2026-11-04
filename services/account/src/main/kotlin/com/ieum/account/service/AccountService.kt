@@ -75,6 +75,11 @@ class AccountService(
 	}
 
 	// 없거나 탈퇴한 계정은 응답에서 빠진다.
+	fun findProfileByEmail(email: String): AccountProfileResponse {
+		val account = accountRepository.findByEmailAndIsDeletedFalse(email) ?: throw IeumException(AccountErrorCode.ACCOUNT_NOT_FOUND)
+		return AccountProfileResponse(accountId = requireNotNull(account.accountId), nickname = account.nickname)
+	}
+
 	fun getProfiles(accountIds: List<UUID>): List<AccountProfileResponse> =
 		accountRepository.findAllByAccountIdInAndIsDeletedFalse(accountIds)
 			.map { AccountProfileResponse(accountId = requireNotNull(it.accountId), nickname = it.nickname) }

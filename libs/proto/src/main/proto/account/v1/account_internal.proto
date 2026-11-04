@@ -9,6 +9,8 @@ option java_package = "com.ieum.proto.account.v1";
 service AccountInternalService {
   // 없거나 탈퇴한 계정은 응답에서 빠진다.
   rpc GetNicknames(GetNicknamesRequest) returns (GetNicknamesResponse);
+  // 가족 초대 대상을 찾는다. 없거나 탈퇴한 계정이면 NOT_FOUND 다.
+  rpc FindAccountByEmail(FindAccountByEmailRequest) returns (FindAccountByEmailResponse);
 }
 
 message GetNicknamesRequest {
@@ -18,4 +20,13 @@ message GetNicknamesRequest {
 message GetNicknamesResponse {
   // key 는 account_id
   map<string, string> nicknames = 1;
+}
+
+message FindAccountByEmailRequest {
+  string email = 1;
+}
+
+message FindAccountByEmailResponse {
+  string account_id = 1;
+  string nickname = 2;
 }

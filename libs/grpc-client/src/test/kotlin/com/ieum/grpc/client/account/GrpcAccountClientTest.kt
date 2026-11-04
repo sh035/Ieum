@@ -2,6 +2,8 @@ package com.ieum.grpc.client.account
 
 import com.ieum.grpc.client.InProcessGrpcTestSupport
 import com.ieum.proto.account.v1.AccountInternalServiceGrpc
+import com.ieum.proto.account.v1.FindAccountByEmailRequest
+import com.ieum.proto.account.v1.FindAccountByEmailResponse
 import com.ieum.proto.account.v1.GetNicknamesRequest
 import com.ieum.proto.account.v1.GetNicknamesResponse
 import com.ieum.web.exception.IeumException
@@ -13,6 +15,7 @@ import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 
 class GrpcAccountClientTest : InProcessGrpcTestSupport() {
 
@@ -72,5 +75,34 @@ class GrpcAccountClientTest : InProcessGrpcTestSupport() {
 
 		val e = assertFailsWith<IeumException> { client.getNicknames(listOf(mom)) }
 		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, e.errorCode.status)
+	}
+
+	private fun clientFindingByEmail(respond: (FindAccountByEmailRequest, StreamObserver<FindAccountByEmailResponse>) -> Unit) =
+		GrpcAccountClient(
+			channelsFor(object : AccountInternalServiceGrpc.AccountInternalServiceImplBase() {
+				override fun findAccountByEmail(request: FindAccountByEmailRequest, observer: StreamObserver<FindAccountByEmailResponse>) {
+					respond(request, observer)
+				}
+			}),
+		)
+
+	@Test
+	fun `이메일로 찾은 계정을 돌려준다`() {
+		var asked = ""
+		val client = clientFindingByEmail { request, observer ->
+			asked = request.email
+			observer.onNext(FindAccountByEmailResponse.newBuilder().setAccountId(mom.toString()).setNickname("엄마").build())
+			observer.onCompleted()
+		}
+
+		assertEquals(AccountProfile(mom, "엄마"), client.findByEmail("mom@ieum.com"))
+		assertEquals("mom@ieum.com", asked)
+	}
+
+	@Test
+	fun `이메일로 찾은 계정이 없으면 null`() {
+		val client = clientFindingByEmail { _, observer -> observer.onError(Status.NOT_FOUND.asRuntimeException()) }
+
+		assertNull(client.findByEmail("nobody@ieum.com"))
 	}
 }

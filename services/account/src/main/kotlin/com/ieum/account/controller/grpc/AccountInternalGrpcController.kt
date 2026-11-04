@@ -3,6 +3,8 @@ package com.ieum.account.controller.grpc
 import com.ieum.account.service.AccountService
 import com.ieum.grpc.server.toUuid
 import com.ieum.proto.account.v1.AccountInternalServiceGrpc
+import com.ieum.proto.account.v1.FindAccountByEmailRequest
+import com.ieum.proto.account.v1.FindAccountByEmailResponse
 import com.ieum.proto.account.v1.GetNicknamesRequest
 import com.ieum.proto.account.v1.GetNicknamesResponse
 import io.grpc.stub.StreamObserver
@@ -20,6 +22,18 @@ class AccountInternalGrpcController(
 		responseObserver.onNext(
 			GetNicknamesResponse.newBuilder()
 				.putAllNicknames(profiles.associate { it.accountId.toString() to it.nickname })
+				.build(),
+		)
+		responseObserver.onCompleted()
+	}
+
+	override fun findAccountByEmail(request: FindAccountByEmailRequest, responseObserver: StreamObserver<FindAccountByEmailResponse>) {
+		val profile = accountService.findProfileByEmail(request.email)
+
+		responseObserver.onNext(
+			FindAccountByEmailResponse.newBuilder()
+				.setAccountId(profile.accountId.toString())
+				.setNickname(profile.nickname)
 				.build(),
 		)
 		responseObserver.onCompleted()

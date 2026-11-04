@@ -3,6 +3,7 @@ package com.ieum.account
 import com.ieum.account.domain.entity.Account
 import com.ieum.account.repository.AccountRepository
 import com.ieum.proto.account.v1.AccountInternalServiceGrpc
+import com.ieum.proto.account.v1.FindAccountByEmailRequest
 import com.ieum.proto.account.v1.GetNicknamesRequest
 import io.grpc.Status
 import io.grpc.StatusRuntimeException
@@ -65,5 +66,30 @@ class AccountInternalGrpcControllerTest @Autowired constructor(
 		val e = assertFailsWith<StatusRuntimeException> { getNicknames("not-a-uuid") }
 
 		assertEquals(Status.Code.INVALID_ARGUMENT, e.status.code)
+	}
+
+	private fun findByEmail(email: String) =
+		stub.findAccountByEmail(FindAccountByEmailRequest.newBuilder().setEmail(email).build())
+
+	@Test
+	fun `이메일로 계정을 찾는다`() {
+		val mom = saveAccount("mom@ieum.com", "엄마")
+
+		val response = findByEmail("mom@ieum.com")
+
+		assertEquals(mom.toString() to "엄마", response.accountId to response.nickname)
+	}
+
+	@Test
+	fun `없거나 탈퇴한 이메일이면 NOT_FOUND`() {
+		val left = accountRepository.save(
+			Account(email = "left@ieum.com", password = "hashed", nickname = "떠난", birthDate = LocalDate.of(1990, 1, 1)),
+		).apply { delete() }
+		accountRepository.save(left)
+
+		listOf("left@ieum.com", "nobody@ieum.com").forEach { email ->
+			val e = assertFailsWith<StatusRuntimeException> { findByEmail(email) }
+			assertEquals(Status.Code.NOT_FOUND, e.status.code)
+		}
 	}
 }
