@@ -21,6 +21,7 @@ import java.time.Clock
 import java.time.LocalDateTime
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 @SpringBootTest
 class GroceryFamilyEventTest @Autowired constructor(
@@ -109,13 +110,22 @@ class GroceryFamilyEventTest @Autowired constructor(
 	@Test
 	fun `가족이 삭제되면 그 가족의 보관 장소와 재고를 지운다`() {
 		val homeItem = item(home, stayer, Visibility.FAMILY)
+		val homePrivate = item(home, leaver, Visibility.PRIVATE)
 		val otherItem = item(otherHome, stayer, Visibility.FAMILY)
 
 		send("FAMILY_DELETED", FamilyEventData(familyId = home))
 
-		assertEquals(true to false, groceryItemRepository.findById(homeItem).get().isDeleted to groceryItemRepository.findById(otherItem).get().isDeleted)
+		assertEquals(
+			listOf(true, true, false),
+			listOf(homeItem, homePrivate, otherItem).map { groceryItemRepository.findById(it).get().isDeleted },
+		)
 		assertEquals(emptyList(), storageRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(home))
 		assertEquals(1, storageRepository.findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(otherHome).size)
+	}
+
+	@Test
+	fun `떠난 사람이 없는 떠남 이벤트는 다시 시도하지 않을 오류로 거른다`() {
+		assertFailsWith<IllegalArgumentException> { send("FAMILY_MEMBER_LEFT", FamilyEventData(familyId = home)) }
 	}
 
 	@Test

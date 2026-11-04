@@ -108,10 +108,9 @@ class GroceryItemService(
 		val item = groceryItemRepository.findByGroceryItemIdAndIsDeletedFalse(groceryItemId)
 			?: throw IeumException(GroceryErrorCode.GROCERY_ITEM_NOT_FOUND)
 
-		val accessible = when (item.visibility) {
-			Visibility.FAMILY -> familyClient.isMember(item.familyId, me)
-			Visibility.PRIVATE -> item.creatorAccountId == me
-		}
+		// 가족을 떠나면 그 가족에 둔 내 개인 물건도 볼 수 없다.
+		val accessible = familyClient.isMember(item.familyId, me) &&
+			(item.visibility == Visibility.FAMILY || item.creatorAccountId == me)
 		if (!accessible) {
 			throw IeumException(GroceryErrorCode.GROCERY_ITEM_NOT_FOUND)
 		}
