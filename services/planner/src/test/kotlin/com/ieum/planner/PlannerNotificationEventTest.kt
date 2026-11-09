@@ -4,6 +4,7 @@ import com.ieum.events.NotificationEvent
 import com.ieum.events.NotificationEventData
 import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationTargetType
+import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.grpc.client.family.FamilyInfo
 import com.ieum.grpc.client.family.FamilyRole
@@ -11,6 +12,7 @@ import com.ieum.planner.repository.ScheduleAttendeeRepository
 import com.ieum.planner.repository.ScheduleRepository
 import com.ieum.planner.repository.TodoChecklistItemRepository
 import com.ieum.planner.repository.TodoRepository
+import com.ieum.web.exception.IeumException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.verify
@@ -156,6 +158,31 @@ class PlannerNotificationEventTest @Autowired constructor(
 	}
 
 	@Test
+	fun `만든 사람이 가족을 떠났으면 완료를 알리지 않는다`() {
+		val todoId = id(send("POST", "/api/v1/todo", body = familyTodo(member)), "todoId")
+		`when`(familyClient.isMember(familyId, me)).thenReturn(false)
+		events.clear()
+
+		val response = send("POST", "/api/v1/todo/$todoId/complete", accountId = member)
+
+		assertEquals(204, response.status)
+		assertEquals(emptyList<NotificationEvent>(), published())
+	}
+
+	@Test
+	fun `family 를 부를 수 없어도 완료는 저장하고 알림만 건너뛴다`() {
+		val todoId = id(send("POST", "/api/v1/todo", body = familyTodo(member)), "todoId")
+		`when`(familyClient.isMember(familyId, me)).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+		events.clear()
+
+		val response = send("POST", "/api/v1/todo/$todoId/complete", accountId = member)
+
+		assertEquals(204, response.status)
+		assertEquals(emptyList<NotificationEvent>(), published())
+		assertEquals(true, todoRepository.findById(todoId).orElseThrow().isCompleted)
+	}
+
+	@Test
 	fun `완료를 취소했다가 다시 완료해도 같은 중복 방지 키라 알림함에는 한 번만 남는다`() {
 		val todoId = id(send("POST", "/api/v1/todo", body = familyTodo(member)), "todoId")
 		events.clear()
@@ -249,6 +276,8 @@ class PlannerNotificationEventTest @Autowired constructor(
 	fun `일정을 고치면 새 참석자는 추가, 남은 참석자는 변경, 빠진 참석자는 취소 알림을 받는다`() {
 		val scheduleId = createSchedule(listOf(me, member, kid))
 		`when`(familyClient.getRoles(familyId, listOf(newbie))).thenReturn(mapOf(newbie to FamilyRole.MEMBER))
+		`when`(familyClient.getRoles(familyId, listOf(member))).thenReturn(mapOf(member to FamilyRole.MEMBER))
+		`when`(familyClient.getRoles(familyId, listOf(kid))).thenReturn(mapOf(kid to FamilyRole.MEMBER))
 		events.clear()
 
 		updateSchedule(scheduleId, listOf(me, member, newbie), startAt = "2026-11-10T19:00:00")
@@ -283,5 +312,59 @@ class PlannerNotificationEventTest @Autowired constructor(
 		send("DELETE", "/api/v1/schedule/$scheduleId")
 
 		assertEquals(listOf(scheduleEvent(NotificationEventType.SCHEDULE_CANCELED, listOf(member, kid), scheduleId)), published())
+	}
+
+	@Test
+	fun `일정을 고쳐도 가족을 떠난 참석자에게는 변경을 알리지 않는다`() {
+		val scheduleId = createSchedule(listOf(me, member, kid))
+		`when`(familyClient.getRoles(familyId, listOf(member, kid))).thenReturn(mapOf(kid to FamilyRole.MEMBER))
+		events.clear()
+
+		updateSchedule(scheduleId, listOf(me, member, kid), startAt = "2026-11-10T19:00:00")
+
+		val at = LocalDateTime.of(2026, 11, 10, 19, 0)
+		assertEquals(listOf(scheduleEvent(NotificationEventType.SCHEDULE_UPDATED, listOf(kid), scheduleId, at = at)), published())
+	}
+
+	@Test
+	fun `일정을 지워도 가족을 떠난 참석자에게는 취소를 알리지 않는다`() {
+		val scheduleId = createSchedule(listOf(me, member, kid))
+		// 참석자 조회에 정렬이 없어 어느 순서로 물어도 같은 답을 준다.
+		`when`(familyClient.getRoles(familyId, listOf(member, kid))).thenReturn(mapOf(kid to FamilyRole.MEMBER))
+		`when`(familyClient.getRoles(familyId, listOf(kid, member))).thenReturn(mapOf(kid to FamilyRole.MEMBER))
+		events.clear()
+
+		send("DELETE", "/api/v1/schedule/$scheduleId")
+
+		assertEquals(listOf(scheduleEvent(NotificationEventType.SCHEDULE_CANCELED, listOf(kid), scheduleId)), published())
+	}
+
+	@Test
+	fun `참석자에서 뺀 사람이 가족을 떠났으면 취소를 알리지 않는다`() {
+		val scheduleId = createSchedule(listOf(me, member, kid))
+		`when`(familyClient.getRoles(familyId, listOf(member))).thenReturn(mapOf(member to FamilyRole.MEMBER))
+		`when`(familyClient.getRoles(familyId, listOf(kid))).thenReturn(emptyMap())
+		events.clear()
+
+		updateSchedule(scheduleId, listOf(me, member))
+
+		assertEquals(listOf(scheduleEvent(NotificationEventType.SCHEDULE_UPDATED, listOf(member), scheduleId)), published())
+		assertEquals(
+			setOf(me, member),
+			scheduleAttendeeRepository.findAllByScheduleIdInAndIsDeletedFalse(listOf(scheduleId)).map { it.accountId }.toSet(),
+		)
+	}
+
+	@Test
+	fun `family 를 부를 수 없어도 일정은 지우고 알림만 건너뛴다`() {
+		val scheduleId = createSchedule(listOf(me, member))
+		`when`(familyClient.getRoles(familyId, listOf(member))).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+		events.clear()
+
+		val response = send("DELETE", "/api/v1/schedule/$scheduleId")
+
+		assertEquals(204, response.status)
+		assertEquals(emptyList<NotificationEvent>(), published())
+		assertEquals(null, scheduleRepository.findByScheduleIdAndIsDeletedFalse(scheduleId))
 	}
 }

@@ -184,6 +184,10 @@ class FamilyInvitationService(
 		val invitation = findReceivedInvitation(me, familyInvitationId)
 		invitation.delete()
 
+		// 초대는 초대한 사람이 떠나도 남아 있으므로, 떠난 사람에게는 알리지 않는다.
+		if (!familyMemberRepository.existsByFamilyIdAndAccountIdAndIsDeletedFalse(invitation.familyId, invitation.inviterAccountId)) {
+			return
+		}
 		notificationEventPublisher.publish(
 			NotificationEventType.FAMILY_INVITATION_DECLINED,
 			NotificationEventData(
