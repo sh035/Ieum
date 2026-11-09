@@ -99,7 +99,7 @@ class TodoService(
 		val me = UUID.fromString(accountId)
 		val familyTodos = familyId?.let {
 			familyClient.requireMember(it, me, PlannerErrorCode.FAMILY_NOT_FOUND)
-			todoRepository.findMyOpenTodosInFamily(it, me)
+			todoRepository.findMyOpenTodosInFamilyAndIsDeletedFalse(it, me)
 		}.orEmpty()
 		val privateTodos =
 			todoRepository.findAllByAssigneeAccountIdAndVisibilityAndIsCompletedFalseAndIsDeletedFalse(me, Visibility.PRIVATE)
@@ -142,7 +142,7 @@ class TodoService(
 	fun findMyOpenTodosDueUntil(me: UUID, familyIds: Set<UUID>, date: LocalDate): List<TodoResponse> =
 		toResponses(
 			me,
-			todoRepository.findMyOpenTodosDueUntil(me, date)
+			todoRepository.findMyOpenTodosDueUntilAndIsDeletedFalse(me, date)
 				.filter { it.familyId == null || it.familyId in familyIds }
 				.sortedWith(compareBy<Todo> { it.dueDate }.thenBy(nullsLast()) { it.dueTime }.thenBy { it.createdAt }),
 		)

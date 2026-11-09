@@ -23,7 +23,7 @@ interface TodoRepository : JpaRepository<Todo, UUID> {
 			and t.isCompleted = false and t.isDeleted = false
 		""",
 	)
-	fun findMyOpenTodosInFamily(familyId: UUID, accountId: UUID): List<Todo>
+	fun findMyOpenTodosInFamilyAndIsDeletedFalse(familyId: UUID, accountId: UUID): List<Todo>
 
 	@Query(
 		"""
@@ -33,7 +33,7 @@ interface TodoRepository : JpaRepository<Todo, UUID> {
 			and t.isCompleted = false and t.isDeleted = false
 		""",
 	)
-	fun findMyOpenTodosDueUntil(accountId: UUID, date: LocalDate): List<Todo>
+	fun findMyOpenTodosDueUntilAndIsDeletedFalse(accountId: UUID, date: LocalDate): List<Todo>
 
 	fun findAllByAssigneeAccountIdAndVisibilityAndIsCompletedFalseAndIsDeletedFalse(
 		assigneeAccountId: UUID,

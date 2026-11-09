@@ -47,5 +47,5 @@ interface ScheduleRepository : JpaRepository<Schedule, UUID> {
 			)
 		""",
 	)
-	fun findAttendingSchedules(accountId: UUID, rangeEnd: LocalDateTime, rangeStart: LocalDateTime): List<Schedule>
+	fun findAttendingSchedulesAndIsDeletedFalse(accountId: UUID, rangeEnd: LocalDateTime, rangeStart: LocalDateTime): List<Schedule>
 }

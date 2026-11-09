@@ -261,10 +261,23 @@ class GroceryItemControllerTest @Autowired constructor(
 	}
 
 	@Test
-	fun `떠난 가족의 재고는 내 개인 재고여도 나오지 않고 가족이 없으면 빈 목록이다`() {
+	fun `떠난 가족의 재고는 내 개인 재고여도 나오지 않는다`() {
 		val today = LocalDate.now().toString()
-		createId(item("가족 재고", expiryDate = today))
-		createId(item("내 개인", visibility = "PRIVATE", expiryDate = today))
+		`when`(familyClient.isMember(otherFamilyId, me)).thenReturn(true)
+		createId(item("지금 가족", expiryDate = today))
+		createId(item("떠난 가족", storageId = otherFridgeId, expiryDate = today), accountId = outsider)
+		createId(item("떠난 가족 내 개인", visibility = "PRIVATE", storageId = otherFridgeId, expiryDate = today))
+		`when`(familyClient.getFamilyIds(me)).thenReturn(listOf(familyId))
+
+		briefing().andExpect {
+			jsonPath("\$.data.length()") { value(1) }
+			jsonPath("\$.data[0].name") { value("지금 가족") }
+		}
+	}
+
+	@Test
+	fun `가족이 없으면 데일리 브리핑은 빈 목록이다`() {
+		createId(item("가족 재고", expiryDate = LocalDate.now().toString()))
 		`when`(familyClient.getFamilyIds(me)).thenReturn(emptyList())
 
 		briefing().andExpect {

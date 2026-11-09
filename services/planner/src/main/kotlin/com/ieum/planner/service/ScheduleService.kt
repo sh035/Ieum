@@ -107,7 +107,7 @@ class ScheduleService(
 		val rangeStart = date.atStartOfDay()
 
 		return toResponses(
-			scheduleRepository.findAttendingSchedules(me, date.plusDays(1).atStartOfDay(), rangeStart)
+			scheduleRepository.findAttendingSchedulesAndIsDeletedFalse(me, date.plusDays(1).atStartOfDay(), rangeStart)
 				.filter { it.familyId == null || it.familyId in familyIds }
 				.filterNot { it.endsBefore(rangeStart) }
 				.sortedWith(compareBy({ it.startAt }, { it.createdAt })),

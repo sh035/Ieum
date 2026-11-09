@@ -9,6 +9,7 @@ import com.ieum.planner.domain.enums.TodoPriority
 import com.ieum.planner.domain.enums.Visibility
 import com.ieum.planner.repository.ScheduleAttendeeRepository
 import com.ieum.planner.repository.ScheduleRepository
+import com.ieum.planner.repository.TodoChecklistItemRepository
 import com.ieum.planner.repository.TodoRepository
 import com.ieum.web.exception.IeumException
 import org.junit.jupiter.api.BeforeEach
@@ -30,6 +31,7 @@ import java.util.UUID
 class DailyBriefingControllerTest @Autowired constructor(
 	private val mockMvc: MockMvc,
 	private val todoRepository: TodoRepository,
+	private val todoChecklistItemRepository: TodoChecklistItemRepository,
 	private val scheduleRepository: ScheduleRepository,
 	private val scheduleAttendeeRepository: ScheduleAttendeeRepository,
 ) : PostgresTestSupport() {
@@ -48,6 +50,7 @@ class DailyBriefingControllerTest @Autowired constructor(
 	fun setUp() {
 		scheduleAttendeeRepository.deleteAllInBatch()
 		scheduleRepository.deleteAllInBatch()
+		todoChecklistItemRepository.deleteAllInBatch()
 		todoRepository.deleteAllInBatch()
 		`when`(familyClient.getFamilyIds(me)).thenReturn(listOf(familyId, otherFamilyId))
 	}
@@ -81,7 +84,7 @@ class DailyBriefingControllerTest @Autowired constructor(
 		family: UUID? = familyId,
 		isAllDay: Boolean = false,
 		attendee: UUID = me,
-	) {
+	): ScheduleAttendee {
 		val saved = scheduleRepository.save(
 			Schedule(
 				familyId = family,
@@ -94,7 +97,7 @@ class DailyBriefingControllerTest @Autowired constructor(
 				endAt = endAt,
 			),
 		)
-		scheduleAttendeeRepository.save(ScheduleAttendee(scheduleId = requireNotNull(saved.scheduleId), accountId = attendee))
+		return scheduleAttendeeRepository.save(ScheduleAttendee(scheduleId = requireNotNull(saved.scheduleId), accountId = attendee))
 	}
 
 	private fun briefing(accountId: UUID = me) = mockMvc.get("/api/v1/daily-briefing") {
@@ -170,6 +173,18 @@ class DailyBriefingControllerTest @Autowired constructor(
 			jsonPath("\$.data.schedules[2].title") { value("개인 일정") }
 			jsonPath("\$.data.schedules[3].title") { value("저녁 약속") }
 		}
+	}
+
+	@Test
+	fun `삭제한 일정과 참석자에서 빠진 일정은 나오지 않는다`() {
+		val midnight = today.atStartOfDay()
+		val deleted = schedule("삭제한 일정", midnight.plusHours(9), midnight.plusHours(10))
+		scheduleRepository.save(scheduleRepository.findById(deleted.scheduleId).orElseThrow().apply { delete() })
+		val removed = schedule("빠진 일정", midnight.plusHours(11), midnight.plusHours(12))
+		removed.delete()
+		scheduleAttendeeRepository.save(removed)
+
+		briefing().andExpect { jsonPath("\$.data.schedules") { isEmpty() } }
 	}
 
 	@Test

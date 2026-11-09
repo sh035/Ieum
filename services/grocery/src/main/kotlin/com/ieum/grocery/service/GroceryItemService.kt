@@ -83,7 +83,7 @@ class GroceryItemService(
 
 		val today = LocalDate.now()
 		return groceryItemRepository.findAllByFamilyIdInAndExpiryDateLessThanEqualAndIsDeletedFalse(familyIds, today.plusDays(1))
-			.filter { it.visibility == Visibility.FAMILY || it.creatorAccountId == me }
+			.filter { it.isVisibleTo(me) }
 			.sortedWith(compareBy<GroceryItem> { it.expiryDate }.thenBy { it.createdAt })
 			.map { it.toBriefingItem(today) }
 	}
@@ -123,14 +123,15 @@ class GroceryItemService(
 			?: throw IeumException(GroceryErrorCode.GROCERY_ITEM_NOT_FOUND)
 
 		// 가족을 떠나면 그 가족에 둔 내 개인 물건도 볼 수 없다.
-		val accessible = familyClient.isMember(item.familyId, me) &&
-			(item.visibility == Visibility.FAMILY || item.creatorAccountId == me)
+		val accessible = familyClient.isMember(item.familyId, me) && item.isVisibleTo(me)
 		if (!accessible) {
 			throw IeumException(GroceryErrorCode.GROCERY_ITEM_NOT_FOUND)
 		}
 
 		return item
 	}
+
+	private fun GroceryItem.isVisibleTo(me: UUID) = visibility == Visibility.FAMILY || creatorAccountId == me
 
 	private fun GroceryItem.toBriefingItem(today: LocalDate): GroceryBriefingItemResponse {
 		val expiryDate = requireNotNull(expiryDate)
