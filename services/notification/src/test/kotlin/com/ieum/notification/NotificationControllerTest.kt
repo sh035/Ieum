@@ -3,9 +3,11 @@ package com.ieum.notification
 import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationTargetType
 import com.ieum.grpc.client.account.AccountClient
+import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.notification.domain.entity.Notification
 import com.ieum.notification.repository.NotificationRepository
+import com.ieum.web.exception.IeumException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.`when`
@@ -42,6 +44,7 @@ class NotificationControllerTest @Autowired constructor(
 	fun setUp() {
 		notificationRepository.deleteAllInBatch()
 		`when`(familyClient.isMember(familyId, me)).thenReturn(true)
+		`when`(familyClient.getFamilyIds(me)).thenReturn(listOf(familyId))
 	}
 
 	private fun save(accountId: UUID = me, familyId: UUID? = this.familyId, title: String = "알림") =
@@ -83,15 +86,14 @@ class NotificationControllerTest @Autowired constructor(
 	fun `탭마다 내 알림만 최신순으로 보여준다`() {
 		save(title = "가족")
 		save(familyId = null, title = "개인")
-		save(familyId = otherFamilyId, title = "다른 가족")
 		save(accountId = other, title = "남의 알림")
 
 		list("ALL").andExpect {
 			status { isOk() }
-			jsonPath("\$.data.length()") { value(3) }
-			jsonPath("\$.data[0].title") { value("다른 가족") }
-			jsonPath("\$.data[2].title") { value("가족") }
-			jsonPath("\$.totalCount") { value(3) }
+			jsonPath("\$.data.length()") { value(2) }
+			jsonPath("\$.data[0].title") { value("개인") }
+			jsonPath("\$.data[1].title") { value("가족") }
+			jsonPath("\$.totalCount") { value(2) }
 		}
 		list("FAMILY", familyId).andExpect {
 			jsonPath("\$.data.length()") { value(1) }
@@ -104,6 +106,55 @@ class NotificationControllerTest @Autowired constructor(
 		list("PERSONAL").andExpect {
 			jsonPath("\$.data.length()") { value(1) }
 			jsonPath("\$.data[0].title") { value("개인") }
+		}
+	}
+
+	@Test
+	fun `전체 탭은 떠난 가족의 알림을 빼고 지금 가족과 개인 알림만 보여준다`() {
+		save(title = "지금 가족")
+		save(familyId = null, title = "개인")
+		val left = save(familyId = otherFamilyId, title = "떠난 가족")
+
+		list("ALL").andExpect {
+			jsonPath("\$.data.length()") { value(2) }
+			jsonPath("\$.data[0].title") { value("개인") }
+			jsonPath("\$.data[1].title") { value("지금 가족") }
+			jsonPath("\$.totalCount") { value(2) }
+		}
+		unreadCount("ALL").andExpect { jsonPath("\$.data.count") { value(2) } }
+
+		mockMvc.post("/api/v1/notification/read-all") {
+			header("Authorization", "Bearer ${accessToken(me)}")
+			param("tab", "ALL")
+		}.andExpect { status { isNoContent() } }
+
+		unreadCount("ALL").andExpect { jsonPath("\$.data.count") { value(0) } }
+		assertEquals(false, notificationRepository.findById(requireNotNull(left.notificationId)).get().isRead)
+	}
+
+	@Test
+	fun `가족이 없어도 전체 탭에 개인 알림은 나온다`() {
+		`when`(familyClient.getFamilyIds(me)).thenReturn(emptyList())
+		save(familyId = null, title = "개인")
+		save(title = "떠난 가족")
+
+		list("ALL").andExpect {
+			status { isOk() }
+			jsonPath("\$.data.length()") { value(1) }
+			jsonPath("\$.data[0].title") { value("개인") }
+		}
+	}
+
+	@Test
+	fun `family 를 부를 수 없으면 전체 탭은 503 이고 개인 탭은 그대로 나온다`() {
+		`when`(familyClient.getFamilyIds(me)).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+		save(familyId = null, title = "개인")
+
+		list("ALL").andExpect { status { isServiceUnavailable() } }
+		unreadCount("ALL").andExpect { status { isServiceUnavailable() } }
+		list("PERSONAL").andExpect {
+			status { isOk() }
+			jsonPath("\$.data.length()") { value(1) }
 		}
 	}
 
