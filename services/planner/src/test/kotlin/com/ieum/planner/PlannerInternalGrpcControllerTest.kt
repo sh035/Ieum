@@ -1,6 +1,9 @@
 package com.ieum.planner
 
+import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.grpc.client.family.FamilyInfo
+import com.ieum.grpc.client.family.FamilyRole
 import com.ieum.planner.domain.entity.Schedule
 import com.ieum.planner.domain.entity.ScheduleAttendee
 import com.ieum.planner.domain.entity.Todo
@@ -13,10 +16,14 @@ import com.ieum.planner.repository.TodoRepository
 import com.ieum.proto.planner.v1.BriefingCounts
 import com.ieum.proto.planner.v1.GetBriefingCountsRequest
 import com.ieum.proto.planner.v1.PlannerInternalServiceGrpc
+import com.ieum.web.exception.IeumException
 import io.grpc.Status
 import io.grpc.StatusRuntimeException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.grpc.test.autoconfigure.AutoConfigureTestGrpcTransport
 import org.springframework.boot.test.context.SpringBootTest
@@ -55,6 +62,12 @@ class PlannerInternalGrpcControllerTest @Autowired constructor(
 		todoRepository.deleteAllInBatch()
 		scheduleAttendeeRepository.deleteAll()
 		scheduleRepository.deleteAll()
+		`when`(familyClient.getFamily(familyId)).thenReturn(
+			FamilyInfo(
+				"우리집",
+				mapOf(mom to FamilyRole.OWNER, dad to FamilyRole.MANAGER, kid to FamilyRole.MEMBER, grandma to FamilyRole.MEMBER),
+			),
+		)
 	}
 
 	private fun countsOn(date: String) =
@@ -154,6 +167,54 @@ class PlannerInternalGrpcControllerTest @Autowired constructor(
 		todo(creator = mom, assignee = dad, dueDate = today.plusDays(1))
 
 		assertEquals(emptyMap(), countsOn("2026-10-30"))
+	}
+
+	@Test
+	fun `가족을 떠난 사람은 맡은 할 일과 참석 일정을 세지 않는다`() {
+		val left = UUID.randomUUID()
+		todo(creator = mom, assignee = left, dueDate = today)
+		todo(creator = left, assignee = dad, dueDate = today.minusDays(1))
+		schedule(today.atTime(10, 0), today.atTime(12, 0), attendees = listOf(left, dad))
+
+		assertEquals(
+			mapOf(
+				mom.toString() to counts(todo = 1),
+				dad.toString() to counts(overdueTodo = 1, schedule = 1),
+			),
+			countsOn("2026-10-30"),
+		)
+	}
+
+	@Test
+	fun `없는 가족의 항목은 건너뛰고 개인 할 일은 센다`() {
+		`when`(familyClient.getFamily(familyId)).thenReturn(null)
+		todo(creator = mom, assignee = dad, dueDate = today)
+		schedule(today.atTime(10, 0), today.atTime(12, 0), attendees = listOf(dad))
+		todo(creator = kid, assignee = kid, dueDate = today, visibility = Visibility.PRIVATE)
+
+		assertEquals(mapOf(kid.toString() to counts(todo = 1)), countsOn("2026-10-30"))
+	}
+
+	@Test
+	fun `같은 가족 항목이 여러 개여도 가족 조회는 한 번이다`() {
+		todo(creator = mom, assignee = dad, dueDate = today)
+		todo(creator = dad, assignee = mom, dueDate = today)
+		schedule(today.atTime(10, 0), today.atTime(12, 0), attendees = listOf(dad))
+
+		countsOn("2026-10-30")
+
+		verify(familyClient, times(1)).getFamily(familyId)
+	}
+
+	@Test
+	fun `가족 조회가 실패하면 일부만 세지 않고 실패로 응답한다`() {
+		`when`(familyClient.getFamily(familyId)).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+		todo(creator = mom, assignee = dad, dueDate = today)
+		todo(creator = kid, assignee = kid, dueDate = today, visibility = Visibility.PRIVATE)
+
+		val e = assertFailsWith<StatusRuntimeException> { countsOn("2026-10-30") }
+
+		assertEquals(Status.Code.UNKNOWN, e.status.code)
 	}
 
 	@Test

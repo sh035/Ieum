@@ -98,6 +98,24 @@ class GroceryInternalGrpcControllerTest @Autowired constructor(
 	}
 
 	@Test
+	fun `가족을 떠난 사람의 개인 재고는 세지 않는다`() {
+		item(home, creator = grandma, expiryDate = today, visibility = Visibility.PRIVATE)
+		item(home, creator = dad, expiryDate = today, visibility = Visibility.PRIVATE)
+
+		assertEquals(mapOf(dad.toString() to 1), countsOn("2026-10-30"))
+	}
+
+	@Test
+	fun `개인 재고만 있는 가족도 조회는 한 번이다`() {
+		item(home, creator = dad, expiryDate = today, visibility = Visibility.PRIVATE)
+		item(home, creator = mom, expiryDate = today, visibility = Visibility.PRIVATE)
+
+		countsOn("2026-10-30")
+
+		verify(familyClient, times(1)).getFamily(home)
+	}
+
+	@Test
 	fun `같은 가족 재고가 여러 개여도 가족 조회는 한 번이다`() {
 		item(home, creator = mom, expiryDate = today)
 		item(home, creator = dad, expiryDate = today)
@@ -114,7 +132,7 @@ class GroceryInternalGrpcControllerTest @Autowired constructor(
 		item(home, creator = dad, expiryDate = today, visibility = Visibility.PRIVATE)
 		item(grandmaHome, creator = grandma, expiryDate = today)
 
-		assertEquals(mapOf(dad.toString() to 1, grandma.toString() to 1, mom.toString() to 1), countsOn("2026-10-30"))
+		assertEquals(mapOf(grandma.toString() to 1, mom.toString() to 1), countsOn("2026-10-30"))
 	}
 
 	@Test
