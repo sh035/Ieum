@@ -1,5 +1,6 @@
 package com.ieum.scheduler
 
+import org.slf4j.LoggerFactory
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import java.time.Duration
@@ -12,12 +13,17 @@ class SchedulerCheckpointService(
 	private val schedulerCheckpointRepository: SchedulerCheckpointRepository,
 ) {
 
+	private val log = LoggerFactory.getLogger(javaClass)
+
 	// (기록한 지점, until] 을 처리한다. 처음이거나 오래 멈췄다면 until - maxCatchUp 까지만 거슬러 올라간다.
 	fun process(name: String, until: LocalDateTime, maxCatchUp: Duration, block: (from: LocalDateTime, until: LocalDateTime) -> Unit) {
 		val floor = until.minus(maxCatchUp)
 		val checkpoint = schedulerCheckpointRepository.findByIdOrNull(name)
 		val from = maxOf(checkpoint?.processedUntil ?: floor, floor)
 		if (from >= until) return
+		if (checkpoint != null && checkpoint.processedUntil < floor) {
+			log.warn("Scheduler window skipped. name={}, from={}, to={}", name, checkpoint.processedUntil, floor)
+		}
 
 		block(from, until)
 		schedulerCheckpointRepository.save(checkpoint?.apply { processedUntil = until } ?: SchedulerCheckpoint(name, until))

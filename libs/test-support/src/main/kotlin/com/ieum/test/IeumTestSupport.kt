@@ -44,6 +44,8 @@ abstract class IeumTestSupport {
 		@DynamicPropertySource
 		fun jwtKeys(registry: DynamicPropertyRegistry) {
 			registry.add("jwt.public-key") { Base64.getEncoder().encodeToString(jwtKeyPair.public.encoded) }
+			// 컨텍스트마다 gRPC 서버가 뜨므로, 앞 컨텍스트가 포트를 늦게 놓아도 충돌하지 않게 빈 포트를 쓴다.
+			registry.add("spring.grpc.server.port") { "0" }
 		}
 
 		fun accessToken(accountId: UUID): String {

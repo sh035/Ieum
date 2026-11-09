@@ -4,7 +4,10 @@ import com.ieum.events.NotificationEvent
 import com.ieum.events.NotificationEventData
 import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationTargetType
+import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.grpc.client.family.FamilyInfo
+import com.ieum.grpc.client.family.FamilyRole
 import com.ieum.planner.domain.entity.Schedule
 import com.ieum.planner.domain.entity.ScheduleAttendee
 import com.ieum.planner.domain.entity.Todo
@@ -19,8 +22,14 @@ import com.ieum.planner.service.DueSoonService
 import com.ieum.scheduler.SchedulerCheckpointRepository
 import com.ieum.scheduler.ShedlockRepository
 import com.ieum.web.config.TimeZoneConfig
+import com.ieum.web.exception.IeumException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.never
+import org.mockito.Mockito.reset
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
@@ -38,6 +47,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 @SpringBootTest
 @RecordApplicationEvents
@@ -89,6 +99,11 @@ class DueSoonSchedulerTest @Autowired constructor(
 		schedulerCheckpointRepository.deleteAll()
 		// ShedLock 은 한 번 만든 락 행을 기억하고 UPDATE 만 하므로, 행을 지우지 않고 만료만 시킨다.
 		shedlockRepository.saveAll(shedlockRepository.findAll().onEach { it.lockUntil = LocalDateTime.of(2000, 1, 1, 0, 0) })
+		members(mom, dad, kid)
+	}
+
+	private fun members(vararg accountIds: UUID) {
+		`when`(familyClient.getFamily(familyId)).thenReturn(FamilyInfo("우리집", accountIds.associateWith { FamilyRole.MEMBER }))
 	}
 
 	private fun runAt(hour: Int, minute: Int, date: LocalDate = today) {
@@ -98,16 +113,24 @@ class DueSoonSchedulerTest @Autowired constructor(
 
 	private fun alertedTitles() = events.stream(NotificationEvent::class.java).toList().map { requireNotNull(it.data.subject) }
 
-	private fun todo(title: String, dueTime: LocalTime?, dueDate: LocalDate = today, completed: Boolean = false, deleted: Boolean = false) =
+	private fun todo(
+		title: String,
+		dueTime: LocalTime?,
+		dueDate: LocalDate = today,
+		completed: Boolean = false,
+		deleted: Boolean = false,
+		visibility: Visibility = Visibility.FAMILY,
+		family: UUID = familyId,
+	) =
 		todoRepository.save(
 			Todo(
 				parentTodoId = null,
-				familyId = familyId,
+				familyId = if (visibility == Visibility.FAMILY) family else null,
 				creatorAccountId = mom,
 				assigneeAccountId = dad,
 				title = title,
 				memo = null,
-				visibility = Visibility.FAMILY,
+				visibility = visibility,
 				priority = TodoPriority.MEDIUM,
 				dueDate = dueDate,
 				dueTime = dueTime,
@@ -123,14 +146,15 @@ class DueSoonSchedulerTest @Autowired constructor(
 		isAllDay: Boolean = false,
 		deleted: Boolean = false,
 		attendees: List<UUID> = listOf(mom, dad),
+		visibility: Visibility = Visibility.FAMILY,
 	): Schedule {
 		val schedule = scheduleRepository.save(
 			Schedule(
-				familyId = familyId,
+				familyId = if (visibility == Visibility.FAMILY) familyId else null,
 				creatorAccountId = mom,
 				title = title,
 				memo = null,
-				visibility = Visibility.FAMILY,
+				visibility = visibility,
 				isAllDay = isAllDay,
 				startAt = startAt,
 				endAt = startAt.plusHours(2),
@@ -242,6 +266,117 @@ class DueSoonSchedulerTest @Autowired constructor(
 			),
 			event.copy(data = event.data.copy(recipientAccountIds = event.data.recipientAccountIds.sorted())),
 		)
+	}
+
+	@Test
+	fun `가족을 떠난 담당자에게는 할 일을 알리지 않는다`() {
+		members(mom, kid)
+		todo("떠난 사람 할 일", LocalTime.of(19, 0))
+
+		runAt(16, 0)
+
+		assertEquals(emptyList(), alertedTitles())
+	}
+
+	@Test
+	fun `가족을 떠난 참석자는 빼고 남은 참석자에게만 일정을 알린다`() {
+		members(mom)
+		schedule("가족 외식", today.atTime(19, 0), attendees = listOf(mom, dad))
+		schedule("떠난 사람만 참석", today.atTime(18, 55), attendees = listOf(dad))
+
+		runAt(16, 0)
+
+		val event = events.stream(NotificationEvent::class.java).toList().single()
+		assertEquals("가족 외식", event.data.subject)
+		assertEquals(listOf(mom), event.data.recipientAccountIds)
+	}
+
+	@Test
+	fun `한 가족을 떠나도 남아 있는 가족의 할 일은 알린다`() {
+		val otherFamilyId = UUID.randomUUID()
+		members(mom)
+		`when`(familyClient.getFamily(otherFamilyId)).thenReturn(FamilyInfo("할머니댁", mapOf(dad to FamilyRole.MEMBER)))
+		todo("떠난 가족 할 일", LocalTime.of(19, 0))
+		todo("남은 가족 할 일", LocalTime.of(19, 0), family = otherFamilyId)
+
+		runAt(16, 0)
+
+		assertEquals(listOf("남은 가족 할 일"), alertedTitles())
+	}
+
+	@Test
+	fun `없는 가족의 항목은 알리지 않는다`() {
+		`when`(familyClient.getFamily(familyId)).thenReturn(null)
+		todo("없는 가족 할 일", LocalTime.of(19, 0))
+		schedule("없는 가족 일정", today.atTime(19, 0))
+
+		runAt(16, 0)
+
+		assertEquals(emptyList(), alertedTitles())
+	}
+
+	@Test
+	fun `개인 할 일과 일정은 가족 조회 없이 알린다`() {
+		todo("개인 할 일", LocalTime.of(19, 0), visibility = Visibility.PRIVATE)
+		schedule("개인 일정", today.atTime(19, 0), attendees = listOf(dad), visibility = Visibility.PRIVATE)
+
+		runAt(16, 0)
+
+		assertEquals(listOf("개인 일정", "개인 할 일"), alertedTitles().sorted())
+		verify(familyClient, never()).getFamily(familyId)
+	}
+
+	@Test
+	fun `같은 가족 항목이 여러 개여도 가족 조회는 한 번이다`() {
+		todo("19시 할 일", LocalTime.of(19, 0))
+		schedule("가족 외식", today.atTime(19, 0))
+
+		runAt(16, 0)
+
+		verify(familyClient, times(1)).getFamily(familyId)
+	}
+
+	@Test
+	fun `구간에 알릴 항목이 없으면 가족을 조회하지 않는다`() {
+		todo("아직 이른 할 일", LocalTime.of(20, 0))
+
+		runAt(16, 0)
+
+		verify(familyClient, never()).getFamily(familyId)
+	}
+
+	@Test
+	fun `family 를 부를 수 없으면 개인 알림도 멈추고 다음 회차에 이어서 처리한다`() {
+		runAt(16, 0)
+		todo("가족 할 일", LocalTime.of(19, 1))
+		todo("개인 할 일", LocalTime.of(19, 1), visibility = Visibility.PRIVATE)
+		`when`(familyClient.getFamily(familyId)).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+
+		assertFailsWith<IeumException> { runAt(16, 1) }
+		assertEquals(emptyList(), alertedTitles())
+
+		reset(familyClient)
+		members(mom, dad, kid)
+		runAt(16, 2)
+
+		assertEquals(listOf("가족 할 일", "개인 할 일"), alertedTitles().sorted())
+	}
+
+	@Test
+	fun `family 장애가 10분을 넘기면 그 구간의 알림은 건너뛴다`() {
+		runAt(16, 0)
+		todo("가족 할 일", LocalTime.of(19, 1))
+		todo("개인 할 일", LocalTime.of(19, 1), visibility = Visibility.PRIVATE)
+		todo("복구 구간 할 일", LocalTime.of(19, 15))
+		`when`(familyClient.getFamily(familyId)).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+
+		assertFailsWith<IeumException> { runAt(16, 1) }
+
+		reset(familyClient)
+		members(mom, dad, kid)
+		runAt(16, 20)
+
+		assertEquals(listOf("복구 구간 할 일"), alertedTitles())
 	}
 
 	@Test
