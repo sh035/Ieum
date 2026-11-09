@@ -137,6 +137,17 @@ class BriefingSchedulerTest @Autowired constructor(
 	}
 
 	@Test
+	fun `두 곳 모두 조회에 실패하면 아무에게도 보내지 않는다`() {
+		token(dad)
+		`when`(plannerClient.getBriefingCounts(today)).thenThrow(unavailable)
+		`when`(groceryClient.getExpiringCounts(today)).thenThrow(IeumException(GrpcClientErrorCode.GROCERY_SERVICE_UNAVAILABLE))
+
+		briefingScheduler.run()
+
+		assertEquals(emptyMap(), briefings())
+	}
+
+	@Test
 	fun `grocery 조회에 실패해도 빈 브리핑은 보내지 않고 planner 개수로만 보낸다`() {
 		token(dad)
 		`when`(plannerClient.getBriefingCounts(today)).thenReturn(mapOf(mom to PlannerBriefingCounts(todo = 1, overdueTodo = 0, schedule = 0)))

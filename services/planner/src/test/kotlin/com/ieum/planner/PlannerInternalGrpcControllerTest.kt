@@ -21,6 +21,7 @@ import io.grpc.Status
 import io.grpc.StatusRuntimeException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
@@ -83,10 +84,11 @@ class PlannerInternalGrpcControllerTest @Autowired constructor(
 		completed: Boolean = false,
 		deleted: Boolean = false,
 		visibility: Visibility = Visibility.FAMILY,
+		family: UUID = familyId,
 	) = todoRepository.save(
 		Todo(
 			parentTodoId = null,
-			familyId = if (visibility == Visibility.FAMILY) familyId else null,
+			familyId = if (visibility == Visibility.FAMILY) family else null,
 			creatorAccountId = creator,
 			assigneeAccountId = assignee,
 			title = "할 일",
@@ -108,14 +110,15 @@ class PlannerInternalGrpcControllerTest @Autowired constructor(
 		isAllDay: Boolean = false,
 		deleted: Boolean = false,
 		removedAttendees: List<UUID> = emptyList(),
+		visibility: Visibility = Visibility.FAMILY,
 	) {
 		val schedule = scheduleRepository.save(
 			Schedule(
-				familyId = familyId,
+				familyId = if (visibility == Visibility.FAMILY) familyId else null,
 				creatorAccountId = mom,
 				title = "일정",
 				memo = null,
-				visibility = Visibility.FAMILY,
+				visibility = visibility,
 				isAllDay = isAllDay,
 				startAt = startAt,
 				endAt = endAt,
@@ -183,6 +186,28 @@ class PlannerInternalGrpcControllerTest @Autowired constructor(
 			),
 			countsOn("2026-10-30"),
 		)
+	}
+
+	@Test
+	fun `한 가족을 떠나도 남아 있는 가족의 몫은 센다`() {
+		val otherFamilyId = UUID.randomUUID()
+		`when`(familyClient.getFamily(familyId)).thenReturn(FamilyInfo("우리집", mapOf(mom to FamilyRole.OWNER)))
+		`when`(familyClient.getFamily(otherFamilyId)).thenReturn(FamilyInfo("할머니댁", mapOf(dad to FamilyRole.OWNER)))
+		todo(creator = mom, assignee = dad, dueDate = today)
+		todo(creator = dad, assignee = dad, dueDate = today, family = otherFamilyId)
+
+		assertEquals(
+			mapOf(mom.toString() to counts(todo = 1), dad.toString() to counts(todo = 1)),
+			countsOn("2026-10-30"),
+		)
+	}
+
+	@Test
+	fun `개인 일정은 가족 조회 없이 참석자 몫으로 센다`() {
+		schedule(today.atTime(10, 0), today.atTime(12, 0), attendees = listOf(kid), visibility = Visibility.PRIVATE)
+
+		assertEquals(mapOf(kid.toString() to counts(schedule = 1)), countsOn("2026-10-30"))
+		verify(familyClient, never()).getFamily(familyId)
 	}
 
 	@Test
