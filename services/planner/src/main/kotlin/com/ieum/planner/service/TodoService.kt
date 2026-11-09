@@ -14,6 +14,7 @@ import com.ieum.planner.controller.dto.response.TodoResponse
 import com.ieum.planner.domain.entity.Todo
 import com.ieum.planner.domain.entity.TodoChecklistItem
 import com.ieum.planner.domain.enums.TodoPriority
+import com.ieum.planner.domain.enums.TodoRelation
 import com.ieum.planner.domain.enums.Visibility
 import com.ieum.planner.exception.PlannerErrorCode
 import com.ieum.planner.repository.TodoChecklistItemRepository
@@ -75,7 +76,7 @@ class TodoService(
 		notify(NotificationEventType.TODO_ASSIGNED, todo, recipient = todo.assigneeAccountId, actor = me)
 		log.debug("Todo created. todoId={}, accountId={}", todo.todoId, accountId)
 
-		return todo.toResponse(checklistItems = emptyList())
+		return todo.toResponse(me, checklistItems = emptyList())
 	}
 
 	// 가족을 지정하면 그 가족의 할 일도 함께 반환한다. 내 개인 할 일은 항상 포함한다.
@@ -89,22 +90,23 @@ class TodoService(
 		val privateTodos =
 			todoRepository.findAllByCreatorAccountIdAndVisibilityAndIsDeletedFalseOrderByCreatedAt(me, Visibility.PRIVATE)
 
-		return toResponses((familyTodos + privateTodos).sortedBy { it.createdAt })
+		return toResponses(me, (familyTodos + privateTodos).sortedBy { it.createdAt })
 	}
 
-	// 내가 담당자인 미완료 할 일을 중요도(우선순위)와 긴급도(마감일)로 나눈다.
+	// 내가 맡았거나 만든 미완료 할 일을 중요도(우선순위)와 긴급도(마감일)로 나눈다.
 	@Transactional(readOnly = true)
 	fun getMatrix(accountId: String, familyId: UUID?): TodoMatrixResponse {
 		val me = UUID.fromString(accountId)
 		val familyTodos = familyId?.let {
 			familyClient.requireMember(it, me, PlannerErrorCode.FAMILY_NOT_FOUND)
-			todoRepository.findAllByFamilyIdAndAssigneeAccountIdAndIsCompletedFalseAndIsDeletedFalse(it, me)
+			todoRepository.findMyOpenTodosInFamilyAndIsDeletedFalse(it, me)
 		}.orEmpty()
 		val privateTodos =
 			todoRepository.findAllByAssigneeAccountIdAndVisibilityAndIsCompletedFalseAndIsDeletedFalse(me, Visibility.PRIVATE)
 
 		val urgentUntil = LocalDate.now().plusDays(1)
 		val todos = toResponses(
+			me,
 			(familyTodos + privateTodos).sortedWith(
 				compareBy<Todo, LocalDate?>(nullsLast()) { it.dueDate }.thenBy { it.createdAt },
 			),
@@ -129,15 +131,27 @@ class TodoService(
 			todoRepository.findAllByCreatorAccountIdAndVisibilityAndDueDateBetweenAndIsDeletedFalse(me, Visibility.PRIVATE, from, to)
 
 		return toResponses(
+			me,
 			(familyTodos + privateTodos).sortedWith(
 				compareBy<Todo>({ it.dueDate }, { it.dueTime }, { it.createdAt }),
 			),
 		)
 	}
 
+	// 기한이 지난 것도 포함해 마감이 가까운 순으로 돌려준다. 시간 없는 할 일은 그날의 맨 뒤다.
+	fun findMyOpenTodosDueUntil(me: UUID, familyIds: Set<UUID>, date: LocalDate): List<TodoResponse> =
+		toResponses(
+			me,
+			todoRepository.findMyOpenTodosDueUntilAndIsDeletedFalse(me, date)
+				.filter { it.familyId == null || it.familyId in familyIds }
+				.sortedWith(compareBy<Todo> { it.dueDate }.thenBy(nullsLast()) { it.dueTime }.thenBy { it.createdAt }),
+		)
+
 	@Transactional(readOnly = true)
-	fun getTodo(accountId: String, todoId: UUID): TodoResponse =
-		toResponses(listOf(findAccessibleTodo(UUID.fromString(accountId), todoId))).single()
+	fun getTodo(accountId: String, todoId: UUID): TodoResponse {
+		val me = UUID.fromString(accountId)
+		return toResponses(me, listOf(findAccessibleTodo(me, todoId))).single()
+	}
 
 	@Transactional
 	fun updateTodo(accountId: String, todoId: UUID, request: UpdateTodoRequest): TodoResponse {
@@ -160,7 +174,7 @@ class TodoService(
 		if (assigneeChanged) {
 			notify(NotificationEventType.TODO_ASSIGNED, saved, recipient = saved.assigneeAccountId, actor = me)
 		}
-		return toResponses(listOf(saved)).single()
+		return toResponses(me, listOf(saved)).single()
 	}
 
 	// 하위 할 일도 함께 삭제한다.
@@ -265,22 +279,30 @@ class TodoService(
 	}
 
 	// 체크리스트는 할 일 수와 상관없이 한 번에 조회한다.
-	private fun toResponses(todos: List<Todo>): List<TodoResponse> {
+	private fun toResponses(me: UUID, todos: List<Todo>): List<TodoResponse> {
 		if (todos.isEmpty()) return emptyList()
 
 		val checklistItems = todoChecklistItemRepository
 			.findAllByTodoIdInAndIsDeletedFalseOrderByCreatedAt(todos.map { requireNotNull(it.todoId) })
 			.groupBy { it.todoId }
 
-		return todos.map { it.toResponse(checklistItems[it.todoId].orEmpty()) }
+		return todos.map { it.toResponse(me, checklistItems[it.todoId].orEmpty()) }
 	}
 
-	private fun Todo.toResponse(checklistItems: List<TodoChecklistItem>) = TodoResponse(
+	private fun Todo.relationTo(me: UUID) = when {
+		creatorAccountId == me && assigneeAccountId == me -> TodoRelation.MINE
+		assigneeAccountId == me -> TodoRelation.ASSIGNED_TO_ME
+		creatorAccountId == me -> TodoRelation.ASSIGNED_BY_ME
+		else -> TodoRelation.OTHER
+	}
+
+	private fun Todo.toResponse(me: UUID, checklistItems: List<TodoChecklistItem>) = TodoResponse(
 		todoId = requireNotNull(todoId),
 		parentTodoId = parentTodoId,
 		familyId = familyId,
 		creatorAccountId = creatorAccountId,
 		assigneeAccountId = assigneeAccountId,
+		relation = relationTo(me),
 		title = title,
 		memo = memo,
 		visibility = visibility,

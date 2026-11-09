@@ -128,6 +128,15 @@ class TodoControllerTest @Autowired constructor(
 	}
 
 	@Test
+	fun `남끼리 맡긴 가족 할 일은 관계가 OTHER 다`() {
+		createId(familyTodo("남의 일", assignee = member), accountId = member)
+
+		get("/api/v1/todo?familyId=$familyId").andExpect {
+			jsonPath("\$.data[0].relation") { value("OTHER") }
+		}
+	}
+
+	@Test
 	fun `목록은 가족 할 일과 내 개인 할 일만 반환한다`() {
 		createId(familyTodo("분리수거"))
 		createId(privateTodo("내 운동"))

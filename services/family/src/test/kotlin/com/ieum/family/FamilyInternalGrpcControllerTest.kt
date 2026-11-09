@@ -7,6 +7,7 @@ import com.ieum.family.repository.FamilyInvitationRepository
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
 import com.ieum.proto.family.v1.FamilyInternalServiceGrpc
+import com.ieum.proto.family.v1.GetFamilyIdsRequest
 import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRolesRequest
@@ -165,5 +166,27 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 		assertStatus(Status.Code.NOT_FOUND) { getFamily(UUID.randomUUID().toString()) }
 		assertStatus(Status.Code.NOT_FOUND) { getFamily(requireNotNull(deleted.familyId).toString()) }
 		assertStatus(Status.Code.INVALID_ARGUMENT) { getFamily("not-a-uuid") }
+	}
+
+	private fun getFamilyIds(accountId: UUID) =
+		stub.getFamilyIds(GetFamilyIdsRequest.newBuilder().setAccountId(accountId.toString()).build()).familyIdsList
+
+	@Test
+	fun `계정이 속한 가족을 모두 돌려주고 떠난 가족은 뺀다`() {
+		val first = createFamily()
+		val second = createFamily()
+		val left = createFamily()
+		val mine = requireNotNull(familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(left, ownerId))
+		mine.delete()
+		familyMemberRepository.save(mine)
+
+		assertEquals(listOf(first.toString(), second.toString()), getFamilyIds(ownerId))
+	}
+
+	@Test
+	fun `속한 가족이 없으면 빈 목록을 돌려준다`() {
+		createFamily()
+
+		assertEquals(emptyList(), getFamilyIds(UUID.randomUUID()))
 	}
 }

@@ -3,7 +3,9 @@ package com.ieum.grocery
 import com.ieum.grocery.domain.entity.Storage
 import com.ieum.grocery.repository.GroceryItemRepository
 import com.ieum.grocery.repository.StorageRepository
+import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.web.exception.IeumException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.`when`
@@ -18,6 +20,7 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.patch
 import org.springframework.test.web.servlet.post
 import tools.jackson.databind.ObjectMapper
+import java.time.LocalDate
 import java.util.UUID
 
 @SpringBootTest
@@ -201,5 +204,92 @@ class GroceryItemControllerTest @Autowired constructor(
 		get("/api/v1/grocery/item/$itemId").andExpect { status { isNotFound() } }
 		mockMvc.delete("/api/v1/grocery/storage/$freezerId") { header("Authorization", "Bearer ${accessToken(me)}") }
 			.andExpect { status { isNoContent() } }
+	}
+
+	private fun briefing(accountId: UUID = me) = get("/api/v1/grocery/daily-briefing", accountId)
+
+	@Test
+	fun `데일리 브리핑은 지남 오늘 내일 순으로 상태와 함께 돌려준다`() {
+		val today = LocalDate.now()
+		`when`(familyClient.getFamilyIds(me)).thenReturn(listOf(familyId))
+		createId(item("내일 우유", expiryDate = today.plusDays(1).toString()))
+		createId(item("오늘 두부", expiryDate = today.toString()))
+		createId(item("오늘 계란", expiryDate = today.toString()))
+		createId(item("지난 치즈", expiryDate = today.minusDays(5).toString()))
+
+		briefing().andExpect {
+			status { isOk() }
+			jsonPath("\$.data.length()") { value(4) }
+			jsonPath("\$.data[0].name") { value("지난 치즈") }
+			jsonPath("\$.data[0].expiryStatus") { value("EXPIRED") }
+			jsonPath("\$.data[1].name") { value("오늘 두부") }
+			jsonPath("\$.data[1].expiryStatus") { value("TODAY") }
+			jsonPath("\$.data[2].name") { value("오늘 계란") }
+			jsonPath("\$.data[3].name") { value("내일 우유") }
+			jsonPath("\$.data[3].expiryStatus") { value("TOMORROW") }
+		}
+	}
+
+	@Test
+	fun `데일리 브리핑에서 모레 이후 기한 없음 삭제한 재고는 빠진다`() {
+		val today = LocalDate.now()
+		`when`(familyClient.getFamilyIds(me)).thenReturn(listOf(familyId))
+		createId(item("모레", expiryDate = today.plusDays(2).toString()))
+		createId(item("기한 없음"))
+		val deletedId = createId(item("삭제", expiryDate = today.toString()))
+		mockMvc.delete("/api/v1/grocery/item/$deletedId") { header("Authorization", "Bearer ${accessToken(me)}") }
+
+		briefing().andExpect {
+			status { isOk() }
+			jsonPath("\$.data") { isEmpty() }
+		}
+	}
+
+	@Test
+	fun `데일리 브리핑은 가족 재고와 내 개인 재고만 돌려준다`() {
+		val today = LocalDate.now().toString()
+		`when`(familyClient.getFamilyIds(me)).thenReturn(listOf(familyId))
+		createId(item("가족 재고", expiryDate = today), accountId = member)
+		createId(item("내 개인", visibility = "PRIVATE", expiryDate = today))
+		createId(item("남의 개인", visibility = "PRIVATE", expiryDate = today), accountId = member)
+
+		briefing().andExpect {
+			jsonPath("\$.data.length()") { value(2) }
+			jsonPath("\$.data[0].name") { value("가족 재고") }
+			jsonPath("\$.data[1].name") { value("내 개인") }
+		}
+	}
+
+	@Test
+	fun `떠난 가족의 재고는 내 개인 재고여도 나오지 않는다`() {
+		val today = LocalDate.now().toString()
+		`when`(familyClient.isMember(otherFamilyId, me)).thenReturn(true)
+		createId(item("지금 가족", expiryDate = today))
+		createId(item("떠난 가족", storageId = otherFridgeId, expiryDate = today), accountId = outsider)
+		createId(item("떠난 가족 내 개인", visibility = "PRIVATE", storageId = otherFridgeId, expiryDate = today))
+		`when`(familyClient.getFamilyIds(me)).thenReturn(listOf(familyId))
+
+		briefing().andExpect {
+			jsonPath("\$.data.length()") { value(1) }
+			jsonPath("\$.data[0].name") { value("지금 가족") }
+		}
+	}
+
+	@Test
+	fun `가족이 없으면 데일리 브리핑은 빈 목록이다`() {
+		createId(item("가족 재고", expiryDate = LocalDate.now().toString()))
+		`when`(familyClient.getFamilyIds(me)).thenReturn(emptyList())
+
+		briefing().andExpect {
+			status { isOk() }
+			jsonPath("\$.data") { isEmpty() }
+		}
+	}
+
+	@Test
+	fun `데일리 브리핑은 family 를 부를 수 없으면 503`() {
+		`when`(familyClient.getFamilyIds(me)).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+
+		briefing().andExpect { status { isServiceUnavailable() } }
 	}
 }

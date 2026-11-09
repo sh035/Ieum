@@ -3,6 +3,7 @@ package com.ieum.planner.repository
 import com.ieum.planner.domain.entity.Todo
 import com.ieum.planner.domain.enums.Visibility
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Query
 import java.time.LocalDate
 import java.util.UUID
 
@@ -14,10 +15,25 @@ interface TodoRepository : JpaRepository<Todo, UUID> {
 
 	fun findAllByFamilyIdAndIsDeletedFalseOrderByCreatedAt(familyId: UUID): List<Todo>
 
-	fun findAllByFamilyIdAndAssigneeAccountIdAndIsCompletedFalseAndIsDeletedFalse(
-		familyId: UUID,
-		assigneeAccountId: UUID,
-	): List<Todo>
+	@Query(
+		"""
+		select t from Todo t
+		where t.familyId = :familyId
+			and (t.assigneeAccountId = :accountId or t.creatorAccountId = :accountId)
+			and t.isCompleted = false and t.isDeleted = false
+		""",
+	)
+	fun findMyOpenTodosInFamilyAndIsDeletedFalse(familyId: UUID, accountId: UUID): List<Todo>
+
+	@Query(
+		"""
+		select t from Todo t
+		where (t.assigneeAccountId = :accountId or t.creatorAccountId = :accountId)
+			and t.dueDate <= :date
+			and t.isCompleted = false and t.isDeleted = false
+		""",
+	)
+	fun findMyOpenTodosDueUntilAndIsDeletedFalse(accountId: UUID, date: LocalDate): List<Todo>
 
 	fun findAllByAssigneeAccountIdAndVisibilityAndIsCompletedFalseAndIsDeletedFalse(
 		assigneeAccountId: UUID,
