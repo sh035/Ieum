@@ -197,7 +197,7 @@ class TodoService(
 		todoRepository.saveAll(todos)
 
 		// 완료를 껐다 켜도 만든 사람은 한 번만 받게 할 일마다 같은 키를 쓴다.
-		if (newlyCompleted) {
+		if (newlyCompleted && todo.creatorAccountId != me && isStillInFamily(todo, todo.creatorAccountId)) {
 			notify(NotificationEventType.TODO_COMPLETED, todo, recipient = todo.creatorAccountId, actor = me, dedupKey = "TODO_COMPLETED:$todoId")
 		}
 	}
@@ -253,6 +253,17 @@ class TodoService(
 			throw IeumException(PlannerErrorCode.INVALID_ASSIGNEE)
 		}
 		return assigneeAccountId
+	}
+
+	// 알림 때문에 완료 저장이 취소되면 안 되므로 조회 실패는 알림만 포기한다.
+	private fun isStillInFamily(todo: Todo, accountId: UUID): Boolean {
+		val familyId = todo.familyId ?: return true
+		return try {
+			familyClient.isMember(familyId, accountId)
+		} catch (e: IeumException) {
+			log.warn("Todo notification skipped. todoId={}, message={}", todo.todoId, e.message)
+			false
+		}
 	}
 
 	// 받는 사람이 행동한 본인이면 발행기가 거른다.

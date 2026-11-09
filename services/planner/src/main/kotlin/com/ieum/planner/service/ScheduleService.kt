@@ -146,9 +146,9 @@ class ScheduleService(
 		// 한 사람이 알림을 두 개 받지 않게 새 참석자 / 남은 참석자 / 빠진 참석자로 나눈다.
 		notify(NotificationEventType.SCHEDULE_ATTENDEE_ADDED, schedule, attendees - currentIds, actor = me)
 		if (changed) {
-			notify(NotificationEventType.SCHEDULE_UPDATED, schedule, attendees.filter { it in currentIds }, actor = me)
+			notifyCurrentMembers(NotificationEventType.SCHEDULE_UPDATED, schedule, attendees.filter { it in currentIds }, actor = me)
 		}
-		notify(NotificationEventType.SCHEDULE_CANCELED, schedule, currentIds - attendees.toSet(), actor = me)
+		notifyCurrentMembers(NotificationEventType.SCHEDULE_CANCELED, schedule, currentIds - attendees.toSet(), actor = me)
 
 		return schedule.toResponse(attendees)
 	}
@@ -161,7 +161,7 @@ class ScheduleService(
 		scheduleRepository.save(schedule)
 
 		val attendees = scheduleAttendeeRepository.findAllByScheduleIdInAndIsDeletedFalse(listOf(scheduleId)).map { it.accountId }
-		notify(NotificationEventType.SCHEDULE_CANCELED, schedule, attendees, actor = me)
+		notifyCurrentMembers(NotificationEventType.SCHEDULE_CANCELED, schedule, attendees, actor = me)
 	}
 
 	// 볼 수 없는 일정은 존재 자체를 숨긴다.
@@ -213,6 +213,20 @@ class ScheduleService(
 		}
 		val family = familyClient.getFamily(familyId) ?: throw IeumException(PlannerErrorCode.FAMILY_NOT_FOUND)
 		return family.members.keys.toList()
+	}
+
+	// 기존 참석자는 탈퇴 이벤트가 처리되기 전이면 이미 가족을 떠났을 수 있어 현재 구성원만 남긴다.
+	// 알림 때문에 일정 저장이 취소되면 안 되므로 조회 실패는 알림만 포기한다.
+	private fun notifyCurrentMembers(type: NotificationEventType, schedule: Schedule, recipients: Collection<UUID>, actor: UUID) {
+		val others = recipients.filter { it != actor }
+		val familyId = schedule.familyId ?: return notify(type, schedule, others, actor)
+		val members = try {
+			familyClient.getRoles(familyId, others).keys
+		} catch (e: IeumException) {
+			log.warn("Schedule notification skipped. scheduleId={}, message={}", schedule.scheduleId, e.message)
+			return
+		}
+		notify(type, schedule, others.filter { it in members }, actor)
 	}
 
 	// 받는 사람에서 행동한 본인은 발행기가 거른다.

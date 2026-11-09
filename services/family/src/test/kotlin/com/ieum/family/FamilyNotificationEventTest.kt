@@ -128,6 +128,21 @@ class FamilyNotificationEventTest @Autowired constructor(
 		)
 	}
 
+	@Test
+	fun `초대한 사람이 가족을 떠났으면 거절을 알리지 않는다`() {
+		val familyId = createFamily()
+		val invitationId = invite(familyId)
+		val inviter = requireNotNull(familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, owner))
+		inviter.delete()
+		familyMemberRepository.save(inviter)
+
+		mockMvc.post("/api/v1/family-invitation/$invitationId/decline") { header("Authorization", "Bearer ${accessToken(newbie)}") }
+			.andExpect { status { isNoContent() } }
+
+		assertEquals(listOf(invitedEvent(familyId, invitationId)), published())
+		assertEquals(null, familyInvitationRepository.findByFamilyInvitationIdAndIsDeletedFalse(invitationId))
+	}
+
 	private fun changeRole(familyId: UUID, familyMemberId: UUID?, role: String) =
 		mockMvc.patch("/api/v1/family/$familyId/member/$familyMemberId/role") {
 			header("Authorization", "Bearer ${accessToken(owner)}")

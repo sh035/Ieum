@@ -77,7 +77,18 @@ class NotificationInboxService(
 		}
 
 		return when (tab) {
-			NotificationTab.ALL -> mine
+			// 떠난 가족의 알림은 내용이 그 가족 것이라 보여 주지 않는다. 다시 들어오면 다시 보인다.
+			NotificationTab.ALL -> {
+				val familyIds = familyClient.getFamilyIds(me)
+				mine.and { root, cb ->
+					val notificationFamilyId = root.get<UUID>("familyId")
+					if (familyIds.isEmpty()) {
+						cb.isNull(notificationFamilyId)
+					} else {
+						cb.or(cb.isNull(notificationFamilyId), notificationFamilyId.`in`(familyIds))
+					}
+				}
+			}
 			NotificationTab.FAMILY -> {
 				val checked = checkFamily(me, familyId)
 				mine.and { root, cb -> cb.equal(root.get<UUID>("familyId"), checked) }
