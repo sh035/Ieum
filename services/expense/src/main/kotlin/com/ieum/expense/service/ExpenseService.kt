@@ -133,10 +133,9 @@ class ExpenseService(
 		val expense = expenseRepository.findByExpenseIdAndIsDeletedFalse(expenseId)
 			?: throw IeumException(ExpenseErrorCode.EXPENSE_NOT_FOUND)
 
-		val accessible = when (expense.visibility) {
-			Visibility.FAMILY -> familyClient.isMember(expense.familyId, me)
-			Visibility.PRIVATE -> expense.creatorAccountId == me
-		}
+		// 가족을 떠나면 그 가족에 남긴 내 개인 지출도 볼 수 없다.
+		val accessible = familyClient.isMember(expense.familyId, me) &&
+			(expense.visibility == Visibility.FAMILY || expense.creatorAccountId == me)
 		if (!accessible) {
 			throw IeumException(ExpenseErrorCode.EXPENSE_NOT_FOUND)
 		}

@@ -7,4 +7,5 @@ object Topics {
 	const val FAMILY = "ieum.family"
 	const val FAMILY_GROCERY_DLT = "ieum.family.grocery.DLT"
 	const val FAMILY_PLANNER_DLT = "ieum.family.planner.DLT"
+	const val FAMILY_EXPENSE_DLT = "ieum.family.expense.DLT"
 }
