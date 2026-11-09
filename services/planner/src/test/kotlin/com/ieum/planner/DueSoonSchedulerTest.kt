@@ -120,11 +120,12 @@ class DueSoonSchedulerTest @Autowired constructor(
 		completed: Boolean = false,
 		deleted: Boolean = false,
 		visibility: Visibility = Visibility.FAMILY,
+		family: UUID = familyId,
 	) =
 		todoRepository.save(
 			Todo(
 				parentTodoId = null,
-				familyId = if (visibility == Visibility.FAMILY) familyId else null,
+				familyId = if (visibility == Visibility.FAMILY) family else null,
 				creatorAccountId = mom,
 				assigneeAccountId = dad,
 				title = title,
@@ -145,14 +146,15 @@ class DueSoonSchedulerTest @Autowired constructor(
 		isAllDay: Boolean = false,
 		deleted: Boolean = false,
 		attendees: List<UUID> = listOf(mom, dad),
+		visibility: Visibility = Visibility.FAMILY,
 	): Schedule {
 		val schedule = scheduleRepository.save(
 			Schedule(
-				familyId = familyId,
+				familyId = if (visibility == Visibility.FAMILY) familyId else null,
 				creatorAccountId = mom,
 				title = title,
 				memo = null,
-				visibility = Visibility.FAMILY,
+				visibility = visibility,
 				isAllDay = isAllDay,
 				startAt = startAt,
 				endAt = startAt.plusHours(2),
@@ -290,12 +292,37 @@ class DueSoonSchedulerTest @Autowired constructor(
 	}
 
 	@Test
-	fun `개인 할 일은 가족 조회 없이 알린다`() {
-		todo("개인 할 일", LocalTime.of(19, 0), visibility = Visibility.PRIVATE)
+	fun `한 가족을 떠나도 남아 있는 가족의 할 일은 알린다`() {
+		val otherFamilyId = UUID.randomUUID()
+		members(mom)
+		`when`(familyClient.getFamily(otherFamilyId)).thenReturn(FamilyInfo("할머니댁", mapOf(dad to FamilyRole.MEMBER)))
+		todo("떠난 가족 할 일", LocalTime.of(19, 0))
+		todo("남은 가족 할 일", LocalTime.of(19, 0), family = otherFamilyId)
 
 		runAt(16, 0)
 
-		assertEquals(listOf("개인 할 일"), alertedTitles())
+		assertEquals(listOf("남은 가족 할 일"), alertedTitles())
+	}
+
+	@Test
+	fun `없는 가족의 항목은 알리지 않는다`() {
+		`when`(familyClient.getFamily(familyId)).thenReturn(null)
+		todo("없는 가족 할 일", LocalTime.of(19, 0))
+		schedule("없는 가족 일정", today.atTime(19, 0))
+
+		runAt(16, 0)
+
+		assertEquals(emptyList(), alertedTitles())
+	}
+
+	@Test
+	fun `개인 할 일과 일정은 가족 조회 없이 알린다`() {
+		todo("개인 할 일", LocalTime.of(19, 0), visibility = Visibility.PRIVATE)
+		schedule("개인 일정", today.atTime(19, 0), attendees = listOf(dad), visibility = Visibility.PRIVATE)
+
+		runAt(16, 0)
+
+		assertEquals(listOf("개인 일정", "개인 할 일"), alertedTitles().sorted())
 		verify(familyClient, never()).getFamily(familyId)
 	}
 
@@ -319,9 +346,10 @@ class DueSoonSchedulerTest @Autowired constructor(
 	}
 
 	@Test
-	fun `family 를 부를 수 없으면 알리지 않고 다음 회차에 이어서 처리한다`() {
+	fun `family 를 부를 수 없으면 개인 알림도 멈추고 다음 회차에 이어서 처리한다`() {
 		runAt(16, 0)
-		todo("19시 1분 할 일", LocalTime.of(19, 1))
+		todo("가족 할 일", LocalTime.of(19, 1))
+		todo("개인 할 일", LocalTime.of(19, 1), visibility = Visibility.PRIVATE)
 		`when`(familyClient.getFamily(familyId)).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
 
 		assertFailsWith<IeumException> { runAt(16, 1) }
@@ -331,7 +359,24 @@ class DueSoonSchedulerTest @Autowired constructor(
 		members(mom, dad, kid)
 		runAt(16, 2)
 
-		assertEquals(listOf("19시 1분 할 일"), alertedTitles())
+		assertEquals(listOf("가족 할 일", "개인 할 일"), alertedTitles().sorted())
+	}
+
+	@Test
+	fun `family 장애가 10분을 넘기면 그 구간의 알림은 건너뛴다`() {
+		runAt(16, 0)
+		todo("가족 할 일", LocalTime.of(19, 1))
+		todo("개인 할 일", LocalTime.of(19, 1), visibility = Visibility.PRIVATE)
+		todo("복구 구간 할 일", LocalTime.of(19, 15))
+		`when`(familyClient.getFamily(familyId)).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+
+		assertFailsWith<IeumException> { runAt(16, 1) }
+
+		reset(familyClient)
+		members(mom, dad, kid)
+		runAt(16, 20)
+
+		assertEquals(listOf("복구 구간 할 일"), alertedTitles())
 	}
 
 	@Test

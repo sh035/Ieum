@@ -39,7 +39,7 @@ class DueSoonService(
 		schedulerCheckpointService.process(CHECKPOINT, until, MAX_CATCH_UP) { windowStart, windowEnd -> notify(windowStart, windowEnd) }
 	}
 
-	// 떠난 사람에게는 보내지 않는다. family 조회가 실패하면 회차 전체를 되돌려, 10분 안에 복구되면 다음 회차가 이어서 처리한다.
+	// 떠난 사람에게는 보내지 않는다. family 조회가 실패하면 같은 구간의 개인 알림도 함께 되돌려, 10분 안에 복구되면 다음 회차가 이어서 처리한다.
 	private fun notify(windowStart: LocalDateTime, windowEnd: LocalDateTime) {
 		val todos = todoRepository
 			.findAllByIsCompletedFalseAndIsDeletedFalseAndDueTimeIsNotNullAndDueDateBetween(windowStart.toLocalDate(), windowEnd.toLocalDate())
