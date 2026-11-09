@@ -2,7 +2,10 @@ package com.ieum.grpc.client.family
 
 import com.ieum.web.exception.ErrorCode
 import com.ieum.web.exception.IeumException
+import org.slf4j.LoggerFactory
 import java.util.UUID
+
+private val log = LoggerFactory.getLogger(FamilyClient::class.java)
 
 interface FamilyClient {
 
@@ -28,3 +31,11 @@ fun FamilyClient.requireMember(familyId: UUID, accountId: UUID, errorCode: Error
 		throw IeumException(errorCode)
 	}
 }
+
+// 가족별 현재 구성원이다. 없는 가족은 빈 구성원이다.
+// 가족마다 family 를 한 번씩 부른다. 가족이 많아져 호출하는 쪽 deadline 을 넘기면 family 에 일괄 조회를 추가한다.
+fun FamilyClient.getMembersOf(familyIds: Collection<UUID>): Map<UUID, Set<UUID>> =
+	familyIds.distinct().associateWith { familyId ->
+		getFamily(familyId)?.members?.keys
+			?: emptySet<UUID>().also { log.warn("Family not found. familyId={}", familyId) }
+	}
