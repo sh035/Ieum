@@ -1,6 +1,7 @@
 package com.ieum.planner.controller.dto.response
 
 import com.ieum.planner.domain.enums.TodoPriority
+import com.ieum.planner.domain.enums.TodoRelation
 import com.ieum.planner.domain.enums.Visibility
 import java.time.LocalDate
 import java.time.LocalTime
@@ -12,6 +13,7 @@ data class TodoResponse(
 	val familyId: UUID?,
 	val creatorAccountId: UUID,
 	val assigneeAccountId: UUID,
+	val relation: TodoRelation,
 	val title: String,
 	val memo: String?,
 	val visibility: Visibility,

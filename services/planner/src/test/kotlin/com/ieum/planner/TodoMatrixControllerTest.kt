@@ -43,7 +43,14 @@ class TodoMatrixControllerTest @Autowired constructor(
 		`when`(familyClient.isMember(familyId, member)).thenReturn(true)
 	}
 
-	private fun create(title: String, priority: String, dueDate: LocalDate?, assignee: UUID = me, family: Boolean = true): String {
+	private fun create(
+		title: String,
+		priority: String,
+		dueDate: LocalDate?,
+		assignee: UUID = me,
+		family: Boolean = true,
+		creator: UUID = me,
+	): String {
 		val due = dueDate?.let { ""","dueDate":"$it"""" } ?: ""
 		val body = if (family) {
 			"""{"familyId":"$familyId","visibility":"FAMILY","title":"$title","priority":"$priority","assigneeAccountId":"$assignee"$due}"""
@@ -51,7 +58,7 @@ class TodoMatrixControllerTest @Autowired constructor(
 			"""{"visibility":"PRIVATE","title":"$title","priority":"$priority"$due}"""
 		}
 		val response = mockMvc.post("/api/v1/todo") {
-			header("Authorization", "Bearer ${accessToken(me)}")
+			header("Authorization", "Bearer ${accessToken(creator)}")
 			contentType = MediaType.APPLICATION_JSON
 			content = body
 		}.andReturn().response.contentAsString
@@ -88,12 +95,23 @@ class TodoMatrixControllerTest @Autowired constructor(
 	}
 
 	@Test
-	fun `남이 담당자인 할 일과 완료한 할 일은 제외한다`() {
-		create("남의 일", "HIGH", today, assignee = member)
+	fun `내가 맡았거나 만든 할 일만 관계와 함께 나오고 완료한 할 일은 제외한다`() {
+		create("내 일", "HIGH", today)
+		create("맡긴 일", "HIGH", today.plusDays(1), assignee = member)
+		create("맡은 일", "HIGH", today.plusDays(1), creator = member)
+		create("남의 일", "HIGH", today, assignee = member, creator = member)
 		val doneId = create("끝난 일", "HIGH", today)
 		mockMvc.post("/api/v1/todo/$doneId/complete") { header("Authorization", "Bearer ${accessToken(me)}") }
 
-		matrix().andExpect { jsonPath("\$.data.importantUrgent") { isEmpty() } }
+		matrix().andExpect {
+			jsonPath("\$.data.importantUrgent.length()") { value(3) }
+			jsonPath("\$.data.importantUrgent[0].title") { value("내 일") }
+			jsonPath("\$.data.importantUrgent[0].relation") { value("MINE") }
+			jsonPath("\$.data.importantUrgent[1].title") { value("맡긴 일") }
+			jsonPath("\$.data.importantUrgent[1].relation") { value("ASSIGNED_BY_ME") }
+			jsonPath("\$.data.importantUrgent[2].title") { value("맡은 일") }
+			jsonPath("\$.data.importantUrgent[2].relation") { value("ASSIGNED_TO_ME") }
+		}
 	}
 
 	@Test
