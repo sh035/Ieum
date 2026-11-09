@@ -49,7 +49,8 @@ notification:
   delivery:
     auto-offset-reset: latest
   scheduler:
-    briefing-cron: "0 0 9 * * *"
+    # 09:00 에 조회가 실패한 날을 위해 09:30 에 한 번 더 돈다. 이미 받은 사람은 dedup 키로 건너뛴다.
+    briefing-cron: "0 0,30 9 * * *"
 
 firebase:
   credentials: ${FIREBASE_CREDENTIALS:}
