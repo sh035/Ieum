@@ -14,6 +14,7 @@ import com.ieum.notification.repository.NotificationRepository
 import com.ieum.notification.scheduler.BriefingScheduler
 import com.ieum.notification.service.NotificationMessage
 import com.ieum.notification.service.NotificationService
+import com.ieum.scheduler.ShedlockRepository
 import com.ieum.web.config.TimeZoneConfig
 import com.ieum.web.exception.IeumException
 import org.junit.jupiter.api.BeforeEach
@@ -26,7 +27,6 @@ import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
-import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import java.time.Clock
@@ -34,6 +34,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @SpringBootTest
 @Import(BriefingSchedulerTest.TestClock::class)
@@ -41,7 +42,7 @@ class BriefingSchedulerTest @Autowired constructor(
 	private val briefingScheduler: BriefingScheduler,
 	private val deviceTokenRepository: DeviceTokenRepository,
 	private val notificationRepository: NotificationRepository,
-	private val jdbcTemplate: JdbcTemplate,
+	private val shedlockRepository: ShedlockRepository,
 ) : PostgresKafkaTestSupport() {
 
 	@TestConfiguration
@@ -76,7 +77,11 @@ class BriefingSchedulerTest @Autowired constructor(
 	fun setUp() {
 		notificationRepository.deleteAllInBatch()
 		deviceTokenRepository.deleteAllInBatch()
-		jdbcTemplate.update("UPDATE notification.shedlock SET lock_until = timezone('utc', now()) - interval '1 second'")
+		releaseLock()
+	}
+
+	private fun releaseLock() {
+		shedlockRepository.saveAll(shedlockRepository.findAll().onEach { it.lockUntil = LocalDateTime.of(2000, 1, 1, 0, 0) })
 	}
 
 	private fun token(accountId: UUID, deleted: Boolean = false) =
@@ -161,7 +166,7 @@ class BriefingSchedulerTest @Autowired constructor(
 		briefingScheduler.run()
 		assertEquals(emptyMap(), briefings())
 
-		jdbcTemplate.update("UPDATE notification.shedlock SET lock_until = timezone('utc', now()) - interval '1 second'")
+		releaseLock()
 		briefingScheduler.run()
 		assertEquals(mapOf(mom to briefing("할 일 1")), briefings())
 	}
@@ -207,7 +212,7 @@ class BriefingSchedulerTest @Autowired constructor(
 		`when`(groceryClient.getExpiringCounts(today)).thenReturn(mapOf(mom to 1))
 
 		briefingScheduler.run()
-		jdbcTemplate.update("UPDATE notification.shedlock SET lock_until = timezone('utc', now()) - interval '1 second'")
+		releaseLock()
 		briefingScheduler.run()
 
 		assertEquals(1, notificationRepository.count())
@@ -217,9 +222,6 @@ class BriefingSchedulerTest @Autowired constructor(
 	fun `여러 Pod 가 함께 돌지 않도록 shedlock 테이블에 락을 남긴다`() {
 		briefingScheduler.run()
 
-		assertEquals(
-			listOf("notification-briefing"),
-			jdbcTemplate.queryForList("SELECT name FROM notification.shedlock WHERE name = 'notification-briefing'", String::class.java),
-		)
+		assertTrue(shedlockRepository.existsById("notification-briefing"))
 	}
 }

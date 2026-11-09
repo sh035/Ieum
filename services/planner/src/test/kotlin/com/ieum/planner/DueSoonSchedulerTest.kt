@@ -16,6 +16,8 @@ import com.ieum.planner.repository.TodoChecklistItemRepository
 import com.ieum.planner.repository.TodoRepository
 import com.ieum.planner.scheduler.DueSoonScheduler
 import com.ieum.planner.service.DueSoonService
+import com.ieum.scheduler.SchedulerCheckpointRepository
+import com.ieum.scheduler.ShedlockRepository
 import com.ieum.web.config.TimeZoneConfig
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -25,7 +27,6 @@ import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
-import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.context.event.ApplicationEvents
 import org.springframework.test.context.event.RecordApplicationEvents
@@ -49,7 +50,8 @@ class DueSoonSchedulerTest @Autowired constructor(
 	private val todoChecklistItemRepository: TodoChecklistItemRepository,
 	private val scheduleRepository: ScheduleRepository,
 	private val scheduleAttendeeRepository: ScheduleAttendeeRepository,
-	private val jdbcTemplate: JdbcTemplate,
+	private val schedulerCheckpointRepository: SchedulerCheckpointRepository,
+	private val shedlockRepository: ShedlockRepository,
 ) : PostgresTestSupport() {
 
 	// 회차마다 시각을 옮겨 가며 이어서 처리하는지 본다.
@@ -84,9 +86,9 @@ class DueSoonSchedulerTest @Autowired constructor(
 		todoRepository.deleteAllInBatch()
 		scheduleAttendeeRepository.deleteAll()
 		scheduleRepository.deleteAll()
-		jdbcTemplate.update("DELETE FROM planner.scheduler_checkpoint")
-		// ShedLock 은 한 번 만든 락 행을 기억하고 UPDATE 만 하므로, 행을 지우지 않고 만료만 시킨다. 락 시각은 UTC 로 저장된다.
-		jdbcTemplate.update("UPDATE planner.shedlock SET lock_until = timezone('utc', now()) - interval '1 second'")
+		schedulerCheckpointRepository.deleteAll()
+		// ShedLock 은 한 번 만든 락 행을 기억하고 UPDATE 만 하므로, 행을 지우지 않고 만료만 시킨다.
+		shedlockRepository.saveAll(shedlockRepository.findAll().onEach { it.lockUntil = LocalDateTime.of(2000, 1, 1, 0, 0) })
 	}
 
 	private fun runAt(hour: Int, minute: Int, date: LocalDate = today) {
@@ -246,6 +248,6 @@ class DueSoonSchedulerTest @Autowired constructor(
 	fun `여러 Pod 가 함께 돌지 않도록 shedlock 테이블에 락을 남긴다`() {
 		dueSoonScheduler.run()
 
-		assertEquals(listOf("planner-due-soon"), jdbcTemplate.queryForList("SELECT name FROM planner.shedlock", String::class.java))
+		assertEquals(listOf("planner-due-soon"), shedlockRepository.findAll().map { it.name })
 	}
 }
