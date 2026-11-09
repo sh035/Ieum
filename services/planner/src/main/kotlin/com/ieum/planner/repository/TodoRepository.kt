@@ -25,6 +25,16 @@ interface TodoRepository : JpaRepository<Todo, UUID> {
 	)
 	fun findMyOpenTodosInFamily(familyId: UUID, accountId: UUID): List<Todo>
 
+	@Query(
+		"""
+		select t from Todo t
+		where (t.assigneeAccountId = :accountId or t.creatorAccountId = :accountId)
+			and t.dueDate <= :date
+			and t.isCompleted = false and t.isDeleted = false
+		""",
+	)
+	fun findMyOpenTodosDueUntil(accountId: UUID, date: LocalDate): List<Todo>
+
 	fun findAllByAssigneeAccountIdAndVisibilityAndIsCompletedFalseAndIsDeletedFalse(
 		assigneeAccountId: UUID,
 		visibility: Visibility,

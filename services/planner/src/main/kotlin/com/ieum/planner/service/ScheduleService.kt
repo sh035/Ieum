@@ -103,6 +103,17 @@ class ScheduleService(
 		return toResponses((familySchedules + privateSchedules).filterNot { it.endsBefore(rangeStart) }.sortedWith(compareBy({ it.startAt }, { it.createdAt })))
 	}
 
+	fun findAttendingSchedulesOn(me: UUID, familyIds: Set<UUID>, date: LocalDate): List<ScheduleResponse> {
+		val rangeStart = date.atStartOfDay()
+
+		return toResponses(
+			scheduleRepository.findAttendingSchedules(me, date.plusDays(1).atStartOfDay(), rangeStart)
+				.filter { it.familyId == null || it.familyId in familyIds }
+				.filterNot { it.endsBefore(rangeStart) }
+				.sortedWith(compareBy({ it.startAt }, { it.createdAt })),
+		)
+	}
+
 	@Transactional(readOnly = true)
 	fun getSchedule(accountId: String, scheduleId: UUID): ScheduleResponse =
 		toResponses(listOf(findAccessibleSchedule(UUID.fromString(accountId), scheduleId))).single()

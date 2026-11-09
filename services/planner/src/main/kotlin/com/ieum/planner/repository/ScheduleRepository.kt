@@ -3,6 +3,7 @@ package com.ieum.planner.repository
 import com.ieum.planner.domain.entity.Schedule
 import com.ieum.planner.domain.enums.Visibility
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Query
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -36,4 +37,15 @@ interface ScheduleRepository : JpaRepository<Schedule, UUID> {
 		rangeEnd: LocalDateTime,
 		rangeStart: LocalDateTime,
 	): List<Schedule>
+
+	@Query(
+		"""
+		select s from Schedule s
+		where s.startAt < :rangeEnd and s.endAt >= :rangeStart and s.isDeleted = false
+			and s.scheduleId in (
+				select a.scheduleId from ScheduleAttendee a where a.accountId = :accountId and a.isDeleted = false
+			)
+		""",
+	)
+	fun findAttendingSchedules(accountId: UUID, rangeEnd: LocalDateTime, rangeStart: LocalDateTime): List<Schedule>
 }

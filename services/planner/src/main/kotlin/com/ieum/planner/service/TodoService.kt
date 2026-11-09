@@ -138,6 +138,15 @@ class TodoService(
 		)
 	}
 
+	// 기한이 지난 것도 포함해 마감이 가까운 순으로 돌려준다. 시간 없는 할 일은 그날의 맨 뒤다.
+	fun findMyOpenTodosDueUntil(me: UUID, familyIds: Set<UUID>, date: LocalDate): List<TodoResponse> =
+		toResponses(
+			me,
+			todoRepository.findMyOpenTodosDueUntil(me, date)
+				.filter { it.familyId == null || it.familyId in familyIds }
+				.sortedWith(compareBy<Todo> { it.dueDate }.thenBy(nullsLast()) { it.dueTime }.thenBy { it.createdAt }),
+		)
+
 	@Transactional(readOnly = true)
 	fun getTodo(accountId: String, todoId: UUID): TodoResponse {
 		val me = UUID.fromString(accountId)
