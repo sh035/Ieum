@@ -4,8 +4,10 @@ import com.ieum.grpc.client.family.FamilyClient
 import com.ieum.grpc.client.family.requireMember
 import com.ieum.grocery.controller.dto.request.CreateGroceryItemRequest
 import com.ieum.grocery.controller.dto.request.UpdateGroceryItemRequest
+import com.ieum.grocery.controller.dto.response.GroceryBriefingItemResponse
 import com.ieum.grocery.controller.dto.response.GroceryItemResponse
 import com.ieum.grocery.domain.entity.GroceryItem
+import com.ieum.grocery.domain.enums.ExpiryStatus
 import com.ieum.grocery.domain.enums.Visibility
 import com.ieum.grocery.exception.GroceryErrorCode
 import com.ieum.grocery.repository.GroceryItemRepository
@@ -73,6 +75,19 @@ class GroceryItemService(
 			.map { it.toResponse() }
 	}
 
+	// 유통기한이 내일까지인 재고를 지남 -> 오늘 -> 내일 순으로, 같은 날은 먼저 등록한 것부터 돌려준다.
+	fun getDailyBriefing(accountId: String): List<GroceryBriefingItemResponse> {
+		val me = UUID.fromString(accountId)
+		val familyIds = familyClient.getFamilyIds(me)
+		if (familyIds.isEmpty()) return emptyList()
+
+		val today = LocalDate.now()
+		return groceryItemRepository.findAllByFamilyIdInAndExpiryDateLessThanEqualAndIsDeletedFalse(familyIds, today.plusDays(1))
+			.filter { it.visibility == Visibility.FAMILY || it.creatorAccountId == me }
+			.sortedWith(compareBy<GroceryItem> { it.expiryDate }.thenBy { it.createdAt })
+			.map { it.toBriefingItem(today) }
+	}
+
 	fun getItem(accountId: String, groceryItemId: UUID): GroceryItemResponse =
 		findAccessibleItem(UUID.fromString(accountId), groceryItemId).toResponse()
 
@@ -115,6 +130,22 @@ class GroceryItemService(
 		}
 
 		return item
+	}
+
+	private fun GroceryItem.toBriefingItem(today: LocalDate): GroceryBriefingItemResponse {
+		val expiryDate = requireNotNull(expiryDate)
+		return GroceryBriefingItemResponse(
+			groceryItemId = requireNotNull(groceryItemId),
+			familyId = familyId,
+			name = name,
+			quantity = quantity,
+			expiryDate = expiryDate,
+			expiryStatus = when {
+				expiryDate.isBefore(today) -> ExpiryStatus.EXPIRED
+				expiryDate == today -> ExpiryStatus.TODAY
+				else -> ExpiryStatus.TOMORROW
+			},
+		)
 	}
 
 	private fun GroceryItem.toResponse() = GroceryItemResponse(

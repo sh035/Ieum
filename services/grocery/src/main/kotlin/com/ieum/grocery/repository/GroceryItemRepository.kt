@@ -22,6 +22,8 @@ interface GroceryItemRepository : JpaRepository<GroceryItem, UUID> {
 
 	fun existsByStorageIdAndIsDeletedFalse(storageId: UUID): Boolean
 
+	fun findAllByFamilyIdInAndExpiryDateLessThanEqualAndIsDeletedFalse(familyIds: Collection<UUID>, date: LocalDate): List<GroceryItem>
+
 	// 브리핑 후보다. 유통기한이 지난 것도 지울 때까지 포함한다.
 	fun findAllByExpiryDateLessThanEqualAndIsDeletedFalse(date: LocalDate): List<GroceryItem>
 }
