@@ -16,6 +16,9 @@ interface FamilyClient {
 
 	// 없거나 삭제된 가족이면 null 이다.
 	fun getFamily(familyId: UUID): FamilyInfo?
+
+	// 계정이 지금 속한 가족들이다.
+	fun getFamilyIds(accountId: UUID): List<UUID>
 }
 
 // 구성원이 아니면 서비스가 정한 오류로 막는다.

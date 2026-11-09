@@ -5,6 +5,8 @@ import com.ieum.family.service.FamilyMemberService
 import com.ieum.family.service.FamilyService
 import com.ieum.grpc.server.toUuid
 import com.ieum.proto.family.v1.FamilyInternalServiceGrpc
+import com.ieum.proto.family.v1.GetFamilyIdsRequest
+import com.ieum.proto.family.v1.GetFamilyIdsResponse
 import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetFamilyResponse
 import com.ieum.proto.family.v1.GetMemberRoleRequest
@@ -13,6 +15,7 @@ import com.ieum.proto.family.v1.GetMemberRolesRequest
 import com.ieum.proto.family.v1.GetMemberRolesResponse
 import io.grpc.stub.StreamObserver
 import org.springframework.stereotype.Service
+import java.util.UUID
 import com.ieum.proto.family.v1.FamilyMember as ProtoFamilyMember
 import com.ieum.proto.family.v1.FamilyRole as ProtoFamilyRole
 
@@ -56,6 +59,13 @@ class FamilyInternalGrpcController(
 				)
 				.build(),
 		)
+		responseObserver.onCompleted()
+	}
+
+	override fun getFamilyIds(request: GetFamilyIdsRequest, responseObserver: StreamObserver<GetFamilyIdsResponse>) {
+		val familyIds = familyMemberService.getFamilyIds(request.accountId.toUuid())
+
+		responseObserver.onNext(GetFamilyIdsResponse.newBuilder().addAllFamilyIds(familyIds.map(UUID::toString)).build())
 		responseObserver.onCompleted()
 	}
 

@@ -2,6 +2,8 @@ package com.ieum.grpc.client.family
 
 import com.ieum.grpc.client.InProcessGrpcTestSupport
 import com.ieum.proto.family.v1.FamilyInternalServiceGrpc
+import com.ieum.proto.family.v1.GetFamilyIdsRequest
+import com.ieum.proto.family.v1.GetFamilyIdsResponse
 import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetFamilyResponse
 import com.ieum.proto.family.v1.GetMemberRoleRequest
@@ -33,6 +35,7 @@ class GrpcFamilyClientTest : InProcessGrpcTestSupport() {
 	private fun clientRespondingWith(
 		rolesRespond: (GetMemberRolesRequest, StreamObserver<GetMemberRolesResponse>) -> Unit = { _, _ -> },
 		familyRespond: (StreamObserver<GetFamilyResponse>) -> Unit = { },
+		familyIdsRespond: (GetFamilyIdsRequest, StreamObserver<GetFamilyIdsResponse>) -> Unit = { _, _ -> },
 		respond: (StreamObserver<GetMemberRoleResponse>) -> Unit = { },
 	) = GrpcFamilyClient(
 		channelsFor(object : FamilyInternalServiceGrpc.FamilyInternalServiceImplBase() {
@@ -46,6 +49,10 @@ class GrpcFamilyClientTest : InProcessGrpcTestSupport() {
 
 			override fun getFamily(request: GetFamilyRequest, observer: StreamObserver<GetFamilyResponse>) {
 				familyRespond(observer)
+			}
+
+			override fun getFamilyIds(request: GetFamilyIdsRequest, observer: StreamObserver<GetFamilyIdsResponse>) {
+				familyIdsRespond(request, observer)
 			}
 		}),
 	)
@@ -148,6 +155,23 @@ class GrpcFamilyClientTest : InProcessGrpcTestSupport() {
 		tearDown()
 		val client = clientRespondingWith(familyRespond = { it.onError(Status.INTERNAL.asRuntimeException()) })
 		val e = assertFailsWith<IeumException> { client.getFamily(familyId) }
+		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, e.errorCode.status)
+	}
+
+	@Test
+	fun `계정의 가족 목록을 UUID 로 바꾸고 실패는 503`() {
+		var asked = ""
+		val client = clientRespondingWith(familyIdsRespond = { request, observer ->
+			asked = request.accountId
+			observer.onNext(GetFamilyIdsResponse.newBuilder().addFamilyIds(familyId.toString()).build())
+			observer.onCompleted()
+		})
+
+		assertEquals(listOf(familyId), client.getFamilyIds(accountId))
+		assertEquals(accountId.toString(), asked)
+		tearDown()
+		val failing = clientRespondingWith(familyIdsRespond = { _, observer -> observer.onError(Status.INTERNAL.asRuntimeException()) })
+		val e = assertFailsWith<IeumException> { failing.getFamilyIds(accountId) }
 		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, e.errorCode.status)
 	}
 }

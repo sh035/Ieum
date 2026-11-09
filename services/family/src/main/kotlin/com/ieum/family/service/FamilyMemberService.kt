@@ -130,6 +130,9 @@ class FamilyMemberService(
 		familyMemberRepository.findAllByFamilyIdAndAccountIdInAndIsDeletedFalse(familyId, accountIds)
 			.associate { it.accountId to it.role }
 
+	fun getFamilyIds(accountId: UUID): List<UUID> =
+		familyMemberRepository.findAllByAccountIdAndIsDeletedFalseOrderByCreatedAt(accountId).map { it.familyId }
+
 	// 가족을 먼저 잠가서 동시에 온 요청은 앞 요청이 끝난 뒤의 역할로 다시 확인한다.
 	private fun findOwner(accountId: String, familyId: UUID): FamilyMember {
 		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)

@@ -15,6 +15,9 @@ service FamilyInternalService {
 
   // 가족 이름과 현재 구성원. 없거나 삭제된 가족이면 NOT_FOUND 로 응답한다.
   rpc GetFamily(GetFamilyRequest) returns (GetFamilyResponse);
+
+  // 계정이 지금 속한 가족들. 없으면 빈 목록으로 응답한다.
+  rpc GetFamilyIds(GetFamilyIdsRequest) returns (GetFamilyIdsResponse);
 }
 
 message GetMemberRoleRequest {
@@ -43,6 +46,14 @@ message GetFamilyRequest {
 message GetFamilyResponse {
   string name = 1;
   repeated FamilyMember members = 2;
+}
+
+message GetFamilyIdsRequest {
+  string account_id = 1;
+}
+
+message GetFamilyIdsResponse {
+  repeated string family_ids = 1;
 }
 
 message FamilyMember {

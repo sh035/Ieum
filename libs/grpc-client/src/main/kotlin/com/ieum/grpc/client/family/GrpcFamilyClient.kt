@@ -4,6 +4,7 @@ import com.ieum.grpc.client.GrpcClientErrorCode
 import com.ieum.grpc.client.GrpcClientSupport
 import com.ieum.proto.family.v1.FamilyInternalServiceGrpc
 import com.ieum.proto.family.v1.FamilyInternalServiceGrpc.FamilyInternalServiceBlockingStub
+import com.ieum.proto.family.v1.GetFamilyIdsRequest
 import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRolesRequest
@@ -58,6 +59,10 @@ class GrpcFamilyClient(
 			members = response.membersList.associate { it.accountId.toUuid() to it.role.toDomain() },
 		)
 	}
+
+	override fun getFamilyIds(accountId: UUID): List<UUID> =
+		call { it.getFamilyIds(GetFamilyIdsRequest.newBuilder().setAccountId(accountId.toString()).build()) }
+			.familyIdsList.map { it.toUuid() }
 
 	private fun ProtoFamilyRole.toDomain() = when (this) {
 		ProtoFamilyRole.FAMILY_ROLE_OWNER -> FamilyRole.OWNER
