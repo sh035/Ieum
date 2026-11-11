@@ -15,6 +15,7 @@ class IeumGrpcExceptionHandlerTest {
 	private enum class TestErrorCode(override val status: HttpStatus, override val message: String) : ErrorCode {
 		NOT_FOUND(HttpStatus.NOT_FOUND, "Family not found."),
 		BAD_REQUEST(HttpStatus.BAD_REQUEST, "Bad input."),
+		UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Family service unavailable."),
 		CONFLICT(HttpStatus.CONFLICT, "Conflict."),
 	}
 
@@ -31,6 +32,14 @@ class IeumGrpcExceptionHandlerTest {
 		assertEquals(
 			Status.Code.INVALID_ARGUMENT,
 			requireNotNull(handler.handleException(IeumException(TestErrorCode.BAD_REQUEST))).status.code,
+		)
+	}
+
+	@Test
+	fun `503 은 UNAVAILABLE 로 바꾼다`() {
+		assertEquals(
+			Status.Code.UNAVAILABLE,
+			requireNotNull(handler.handleException(IeumException(TestErrorCode.UNAVAILABLE))).status.code,
 		)
 	}
 
