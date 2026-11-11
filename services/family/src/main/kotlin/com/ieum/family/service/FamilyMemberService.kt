@@ -6,6 +6,7 @@ import com.ieum.events.NotificationEventData
 import com.ieum.events.NotificationEventPublisher
 import com.ieum.events.NotificationEventType
 import com.ieum.events.NotificationTargetType
+import com.ieum.family.controller.dto.request.UpdateFamilyMemberNicknameRequest
 import com.ieum.family.controller.dto.request.UpdateFamilyMemberRoleRequest
 import com.ieum.family.controller.dto.response.FamilyMemberResponse
 import com.ieum.family.controller.dto.response.FamilyMemberRoleResponse
@@ -37,6 +38,24 @@ class FamilyMemberService(
 
 		return members.map { it.toResponse() }
 	}
+
+	// 이 가족에서 쓰는 내 닉네임은 본인만 바꾼다.
+	// 행 전체를 다시 쓰므로, 내보내기 / 소유권 넘기기와 겹쳐 옛 값을 되살리지 않게 다른 구성원 변경처럼 가족을 잠근다.
+	@Transactional
+	fun updateMyNickname(accountId: String, familyId: UUID, request: UpdateFamilyMemberNicknameRequest): FamilyMemberResponse {
+		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
+		val member = familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, UUID.fromString(accountId))
+			?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
+		member.nickname = request.nickname
+
+		return member.toResponse()
+	}
+
+	// 나간 구성원은 마지막으로 쓰던 닉네임이다. 다시 들어왔으면 지금 닉네임이다.
+	fun getNicknames(familyId: UUID, accountIds: Collection<UUID>): Map<UUID, String> =
+		familyMemberRepository.findAllByFamilyIdAndAccountIdIn(familyId, accountIds)
+			.groupBy { it.accountId }
+			.mapValues { (_, rows) -> (rows.firstOrNull { !it.isDeleted } ?: rows.maxBy { it.createdAt }).nickname }
 
 	// OWNER 가 구성원을 MEMBER <-> MANAGER 로 바꾼다. OWNER 역할은 이 API 로 주거나 뺏을 수 없다.
 	@Transactional
@@ -148,6 +167,7 @@ class FamilyMemberService(
 		familyMemberId = requireNotNull(familyMemberId),
 		accountId = accountId,
 		role = role,
+		nickname = nickname,
 		joinedAt = createdAt,
 	)
 }

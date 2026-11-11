@@ -8,6 +8,7 @@ import com.ieum.proto.family.v1.GetFamilyIdsRequest
 import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRolesRequest
+import com.ieum.proto.family.v1.GetMemberNicknamesRequest
 import org.springframework.grpc.client.GrpcChannelFactory
 import org.springframework.stereotype.Component
 import java.util.UUID
@@ -63,6 +64,23 @@ class GrpcFamilyClient(
 	override fun getFamilyIds(accountId: UUID): List<UUID> =
 		call { it.getFamilyIds(GetFamilyIdsRequest.newBuilder().setAccountId(accountId.toString()).build()) }
 			.familyIdsList.map { it.toUuid() }
+
+	override fun getNicknames(familyId: UUID, accountIds: Collection<UUID>): Map<UUID, String> {
+		if (accountIds.isEmpty()) {
+			return emptyMap()
+		}
+
+		val response = call {
+			it.getMemberNicknames(
+				GetMemberNicknamesRequest.newBuilder()
+					.setFamilyId(familyId.toString())
+					.addAllAccountIds(accountIds.map(UUID::toString))
+					.build(),
+			)
+		}
+
+		return response.nicknamesMap.entries.associate { (accountId, nickname) -> accountId.toUuid() to nickname }
+	}
 
 	private fun ProtoFamilyRole.toDomain() = when (this) {
 		ProtoFamilyRole.FAMILY_ROLE_OWNER -> FamilyRole.OWNER

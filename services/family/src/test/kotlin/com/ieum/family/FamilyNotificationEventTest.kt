@@ -57,7 +57,7 @@ class FamilyNotificationEventTest @Autowired constructor(
 
 	private fun createFamily(): UUID {
 		val familyId = requireNotNull(familyRepository.save(Family(name = "우리집")).familyId)
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = owner, role = FamilyRole.OWNER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = owner, role = FamilyRole.OWNER, nickname = "구성원"))
 		return familyId
 	}
 
@@ -77,7 +77,7 @@ class FamilyNotificationEventTest @Autowired constructor(
 	@Test
 	fun `초대를 수락하면 기존 구성원에게 알린다`() {
 		val familyId = createFamily()
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = member, role = FamilyRole.MEMBER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = member, role = FamilyRole.MEMBER, nickname = "구성원"))
 		val invitationId = invite(familyId)
 
 		mockMvc.post("/api/v1/family-invitation/$invitationId/accept") { header("Authorization", "Bearer ${accessToken(newbie)}") }
@@ -153,7 +153,7 @@ class FamilyNotificationEventTest @Autowired constructor(
 	@Test
 	fun `역할이 바뀌면 당사자에게 새 역할을 알린다`() {
 		val familyId = createFamily()
-		val target = familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = member, role = FamilyRole.MEMBER))
+		val target = familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = member, role = FamilyRole.MEMBER, nickname = "구성원"))
 
 		changeRole(familyId, target.familyMemberId, "MANAGER")
 		changeRole(familyId, target.familyMemberId, "MANAGER")
@@ -162,7 +162,7 @@ class FamilyNotificationEventTest @Autowired constructor(
 	}
 
 	private fun saveMember(familyId: UUID, accountId: UUID) =
-		requireNotNull(familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = accountId, role = FamilyRole.MEMBER)).familyMemberId)
+		requireNotNull(familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = accountId, role = FamilyRole.MEMBER, nickname = "구성원")).familyMemberId)
 
 	@Test
 	fun `스스로 나가면 남은 구성원에게 알린다`() {

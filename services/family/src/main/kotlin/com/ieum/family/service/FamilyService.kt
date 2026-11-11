@@ -16,6 +16,7 @@ import com.ieum.family.exception.FamilyErrorCode
 import com.ieum.family.repository.FamilyInvitationRepository
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
+import com.ieum.grpc.client.account.AccountClient
 import com.ieum.web.exception.IeumException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -29,19 +30,23 @@ class FamilyService(
 	private val familyInvitationRepository: FamilyInvitationRepository,
 	private val notificationEventPublisher: NotificationEventPublisher,
 	private val familyEventPublisher: FamilyEventPublisher,
+	private val accountClient: AccountClient,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
 
 	@Transactional
 	fun createFamily(accountId: String, name: String): CreateFamilyResponse {
+		val me = UUID.fromString(accountId)
+		val nickname = accountClient.accountNickname(me)
 		val familyId = requireNotNull(familyRepository.save(Family(name = name)).familyId)
 
 		familyMemberRepository.save(
 			FamilyMember(
 				familyId = familyId,
-				accountId = UUID.fromString(accountId),
+				accountId = me,
 				role = FamilyRole.OWNER,
+				nickname = nickname,
 			),
 		)
 

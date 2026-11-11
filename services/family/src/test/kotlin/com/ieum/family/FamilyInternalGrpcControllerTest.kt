@@ -11,6 +11,7 @@ import com.ieum.proto.family.v1.GetFamilyIdsRequest
 import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRolesRequest
+import com.ieum.proto.family.v1.GetMemberNicknamesRequest
 import io.grpc.Status
 import io.grpc.StatusRuntimeException
 import org.junit.jupiter.api.BeforeEach
@@ -45,7 +46,7 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 
 	private fun createFamily(): UUID {
 		val familyId = requireNotNull(familyRepository.save(Family(name = "우리집")).familyId)
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER, nickname = "구성원"))
 		return familyId
 	}
 
@@ -54,6 +55,32 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 			GetMemberRoleRequest.newBuilder().setFamilyId(familyId).setAccountId(accountId).build(),
 		)
 
+	@Test
+	fun `닉네임은 나간 구성원의 마지막 닉네임을 담고 구성원이었던 적 없는 계정은 뺀다`() {
+		val familyId = createFamily()
+		val left = UUID.randomUUID()
+		val rejoined = UUID.randomUUID()
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = left, role = FamilyRole.MEMBER, nickname = "작은삼촌").apply { delete() })
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = left, role = FamilyRole.MEMBER, nickname = "삼촌").apply { delete() })
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = rejoined, role = FamilyRole.MEMBER, nickname = "옛 이름").apply { delete() })
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = rejoined, role = FamilyRole.MEMBER, nickname = "새 이름"))
+		val otherFamilyId = requireNotNull(familyRepository.save(Family(name = "본가")).familyId)
+		familyMemberRepository.save(FamilyMember(familyId = otherFamilyId, accountId = ownerId, role = FamilyRole.MEMBER, nickname = "막내"))
+		familyMemberRepository.save(FamilyMember(familyId = otherFamilyId, accountId = left, role = FamilyRole.MEMBER, nickname = "형"))
+
+		val response = stub.getMemberNicknames(
+			GetMemberNicknamesRequest.newBuilder()
+				.setFamilyId(familyId.toString())
+				.addAllAccountIds(listOf(ownerId, left, rejoined, UUID.randomUUID()).map(UUID::toString))
+				.build(),
+		)
+
+		assertEquals(
+			mapOf(ownerId.toString() to "구성원", left.toString() to "삼촌", rejoined.toString() to "새 이름"),
+			response.nicknamesMap,
+		)
+	}
+
 	private fun assertStatus(code: Status.Code, call: () -> Unit) =
 		assertEquals(code, assertFailsWith<StatusRuntimeException> { call() }.status.code)
 
@@ -61,7 +88,7 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 	fun `구성원이면 역할을 반환한다`() {
 		val familyId = createFamily()
 		val manager = familyMemberRepository.save(
-			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MANAGER),
+			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MANAGER, nickname = "구성원"),
 		)
 
 		assertEquals(ProtoFamilyRole.FAMILY_ROLE_OWNER, getRole(familyId.toString(), ownerId.toString()).role)
@@ -79,7 +106,7 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 	fun `내보낸 구성원이면 NOT_FOUND`() {
 		val familyId = createFamily()
 		val member = familyMemberRepository.save(
-			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER),
+			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER, nickname = "구성원"),
 		)
 		member.delete()
 		familyMemberRepository.save(member)
@@ -105,15 +132,15 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 	fun `여러 계정을 한 번에 확인하면 구성원만 역할과 함께 돌려준다`() {
 		val familyId = createFamily()
 		val member = familyMemberRepository.save(
-			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER),
+			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER, nickname = "구성원"),
 		)
 		val left = familyMemberRepository.save(
-			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER),
+			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER, nickname = "구성원"),
 		)
 		left.delete()
 		familyMemberRepository.save(left)
 		val otherFamilyMember = UUID.randomUUID()
-		familyMemberRepository.save(FamilyMember(familyId = createFamily(), accountId = otherFamilyMember, role = FamilyRole.OWNER))
+		familyMemberRepository.save(FamilyMember(familyId = createFamily(), accountId = otherFamilyMember, role = FamilyRole.OWNER, nickname = "구성원"))
 
 		val roles = getRoles(familyId.toString(), ownerId.toString(), member.accountId.toString(), left.accountId.toString(), otherFamilyMember.toString(), UUID.randomUUID().toString())
 
@@ -134,7 +161,7 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 	fun `가족 이름과 현재 구성원을 돌려준다`() {
 		val familyId = createFamily()
 		val manager = familyMemberRepository.save(
-			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MANAGER),
+			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MANAGER, nickname = "구성원"),
 		)
 
 		val family = getFamily(familyId.toString())
@@ -150,7 +177,7 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 	fun `내보낸 구성원은 가족 정보에서 빠진다`() {
 		val familyId = createFamily()
 		val left = familyMemberRepository.save(
-			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER),
+			FamilyMember(familyId = familyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER, nickname = "구성원"),
 		)
 		left.delete()
 		familyMemberRepository.save(left)

@@ -31,6 +31,7 @@ import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -63,8 +64,8 @@ class FamilyInvitationControllerTest @Autowired constructor(
 
 	private fun createFamily(name: String = "우리집"): UUID {
 		val familyId = requireNotNull(familyRepository.save(Family(name = name)).familyId)
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER))
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = memberId, role = FamilyRole.MEMBER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER, nickname = "우리 엄마"))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = memberId, role = FamilyRole.MEMBER, nickname = "구성원"))
 		return familyId
 	}
 
@@ -214,8 +215,39 @@ class FamilyInvitationControllerTest @Autowired constructor(
 			jsonPath("\$.data[0].familyId") { value(familyId.toString()) }
 			jsonPath("\$.data[0].familyName") { value("우리집") }
 			jsonPath("\$.data[0].inviterAccountId") { value(ownerId.toString()) }
-			jsonPath("\$.data[0].inviterNickname") { value("엄마") }
+			jsonPath("\$.data[0].inviterNickname") { value("우리 엄마") }
 		}
+	}
+
+	@Test
+	fun `받은 초대의 초대한 사람 이름은 그 가족에서 쓰는 닉네임이다`() {
+		val home = createFamily()
+		val inlaws = requireNotNull(familyRepository.save(Family(name = "시댁")).familyId)
+		familyMemberRepository.save(FamilyMember(familyId = inlaws, accountId = ownerId, role = FamilyRole.OWNER, nickname = "며느리"))
+		invite(home).andExpect { status { isCreated() } }
+		invite(inlaws).andExpect { status { isCreated() } }
+
+		getReceived().andExpect {
+			jsonPath("\$.data.length()") { value(2) }
+			jsonPath("\$.data[?(@.familyName == '우리집')].inviterNickname") { value("우리 엄마") }
+			jsonPath("\$.data[?(@.familyName == '시댁')].inviterNickname") { value("며느리") }
+		}
+	}
+
+	@Test
+	fun `수락할 때 계정 닉네임을 못 찾으면 404, account 장애면 503 이고 가입되지 않는다`() {
+		val familyId = createFamily()
+		val invitationId = inviteId(familyId)
+
+		`when`(accountClient.getNicknames(setOf(inviteeId))).thenReturn(emptyMap())
+		accept(invitationId).andExpect {
+			status { isNotFound() }
+			jsonPath("\$.message") { value("Account not found.") }
+		}
+		`when`(accountClient.getNicknames(setOf(inviteeId))).thenThrow(IeumException(GrpcClientErrorCode.ACCOUNT_SERVICE_UNAVAILABLE))
+		accept(invitationId).andExpect { status { isServiceUnavailable() } }
+
+		assertNull(familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeId))
 	}
 
 	@Test
@@ -230,7 +262,9 @@ class FamilyInvitationControllerTest @Autowired constructor(
 			jsonPath("\$.data.role") { value("MEMBER") }
 		}
 
-		assertEquals(FamilyRole.MEMBER, familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeId)?.role)
+		val joined = requireNotNull(familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeId))
+		assertEquals(FamilyRole.MEMBER, joined.role)
+		assertEquals("막내", joined.nickname)
 		accept(invitationId).andExpect { status { isNotFound() } }
 		getReceived().andExpect { jsonPath("\$.data.length()") { value(0) } }
 	}
@@ -251,7 +285,7 @@ class FamilyInvitationControllerTest @Autowired constructor(
 	fun `동시 수락으로 exists 확인을 통과해도 409`() {
 		val familyId = createFamily()
 		val invitationId = inviteId(familyId)
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = inviteeId, role = FamilyRole.MEMBER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = inviteeId, role = FamilyRole.MEMBER, nickname = "구성원"))
 		doReturn(false).`when`(familyMemberRepositorySpy).existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeId)
 
 		accept(invitationId).andExpect { status { isConflict() } }
@@ -274,7 +308,7 @@ class FamilyInvitationControllerTest @Autowired constructor(
 		val familyId = createFamily()
 		val neighborOwner = UUID.randomUUID()
 		val neighborFamilyId = requireNotNull(familyRepository.save(Family(name = "옆집")).familyId)
-		familyMemberRepository.save(FamilyMember(familyId = neighborFamilyId, accountId = neighborOwner, role = FamilyRole.OWNER))
+		familyMemberRepository.save(FamilyMember(familyId = neighborFamilyId, accountId = neighborOwner, role = FamilyRole.OWNER, nickname = "구성원"))
 		val neighborInvitationId = familyInvitationRepository.save(
 			FamilyInvitation(familyId = neighborFamilyId, inviterAccountId = neighborOwner, inviteeAccountId = inviteeId, expiresAt = LocalDateTime.now().plusHours(1)),
 		).familyInvitationId

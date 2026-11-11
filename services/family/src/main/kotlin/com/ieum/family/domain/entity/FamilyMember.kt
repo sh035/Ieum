@@ -24,6 +24,9 @@ class FamilyMember(
 	@Column(nullable = false)
 	var role: FamilyRole,
 
+	@Column(nullable = false)
+	var nickname: String,
+
 	@Id
 	@UuidGenerator(style = UuidGenerator.Style.VERSION_7)
 	@Column(nullable = false, updatable = false)

@@ -9,6 +9,7 @@ enum class FamilyErrorCode(
 ) : ErrorCode {
 
 	FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "Family not found."),
+	ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "Account not found."),
 	FAMILY_ACCESS_DENIED(HttpStatus.FORBIDDEN, "Family access denied."),
 	FAMILY_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "Family member not found."),
 	INVALID_ROLE_CHANGE(HttpStatus.BAD_REQUEST, "Only MEMBER and MANAGER can be switched, and the owner role cannot change."),

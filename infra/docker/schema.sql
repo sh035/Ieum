@@ -42,6 +42,7 @@ CREATE TABLE family.family_member
 	family_id        uuid         NOT NULL REFERENCES family.family (family_id), -- 가족
 	account_id       uuid         NOT NULL,    -- 계정
 	role             varchar(20)  NOT NULL,    -- OWNER / MANAGER(살림 함께 꾸리기) / MEMBER
+	nickname         varchar(20)  NOT NULL,    -- 이 가족에서 부르는 이름. 들어올 때 계정 닉네임을 복사하고 본인이 바꾼다
 	created_at       timestamp(6) NOT NULL,    -- 들어온 시각
 	updated_at       timestamp(6),             -- 마지막 수정 시각 (역할 변경 등)
 	is_deleted       boolean      NOT NULL DEFAULT false -- 나갔거나 내보내졌는지

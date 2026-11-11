@@ -7,8 +7,11 @@ import com.ieum.family.domain.enums.FamilyRole
 import com.ieum.family.repository.FamilyInvitationRepository
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
+import com.ieum.grpc.client.GrpcClientErrorCode
+import com.ieum.web.exception.IeumException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -33,12 +36,15 @@ class FamilyControllerTest @Autowired constructor(
 ) : PostgresTestSupport() {
 
 	private val accountId = UUID.randomUUID()
+	private val strangerId = UUID.randomUUID()
 
 	@BeforeEach
 	fun clean() {
 		familyInvitationRepository.deleteAll()
 		familyMemberRepository.deleteAll()
 		familyRepository.deleteAll()
+		`when`(accountClient.getNicknames(setOf(accountId))).thenReturn(mapOf(accountId to "토비"))
+		`when`(accountClient.getNicknames(setOf(strangerId))).thenReturn(mapOf(strangerId to "남"))
 	}
 
 	private fun createFamily(name: String, accountId: UUID = this.accountId) = mockMvc.post("/api/v1/family") {
@@ -66,6 +72,19 @@ class FamilyControllerTest @Autowired constructor(
 		assertEquals(familyId, member.familyId)
 		assertEquals(accountId, member.accountId)
 		assertEquals(FamilyRole.OWNER, member.role)
+		assertEquals("토비", member.nickname)
+	}
+
+	@Test
+	fun `계정 닉네임을 못 찾으면 404, account 장애면 503 이고 가족을 만들지 않는다`() {
+		createFamily("우리집", accountId = UUID.randomUUID()).andExpect {
+			status { isNotFound() }
+			jsonPath("\$.message") { value("Account not found.") }
+		}
+		`when`(accountClient.getNicknames(setOf(accountId))).thenThrow(IeumException(GrpcClientErrorCode.ACCOUNT_SERVICE_UNAVAILABLE))
+		createFamily("우리집").andExpect { status { isServiceUnavailable() } }
+
+		assertEquals(0, familyRepository.count())
 	}
 
 	@Test
@@ -80,7 +99,7 @@ class FamilyControllerTest @Autowired constructor(
 	fun `내 가족 목록은 내가 속한 가족만 가입 순서대로 반환한다`() {
 		createFamily("우리집")
 		createFamily("동호회")
-		createFamily("남의집", accountId = UUID.randomUUID())
+		createFamily("남의집", accountId = strangerId)
 
 		getMyFamilies().andExpect {
 			status { isOk() }
@@ -105,8 +124,8 @@ class FamilyControllerTest @Autowired constructor(
 
 	private fun saveFamily(): UUID {
 		val familyId = requireNotNull(familyRepository.save(Family(name = "우리집")).familyId)
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER))
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = memberId, role = FamilyRole.MEMBER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER, nickname = "구성원"))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = memberId, role = FamilyRole.MEMBER, nickname = "구성원"))
 		return familyId
 	}
 
@@ -143,7 +162,7 @@ class FamilyControllerTest @Autowired constructor(
 	@Test
 	fun `혼자 남은 OWNER가 나가면 가족과 대기 중인 초대가 모두 삭제된다`() {
 		val familyId = requireNotNull(familyRepository.save(Family(name = "자취방")).familyId)
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER, nickname = "구성원"))
 		listOf(memberId, UUID.randomUUID()).forEach { invitee ->
 			familyInvitationRepository.save(
 				FamilyInvitation(familyId = familyId, inviterAccountId = ownerId, inviteeAccountId = invitee, expiresAt = LocalDateTime.now().plusHours(1)),
