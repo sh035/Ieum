@@ -1,7 +1,6 @@
 package com.ieum.account.controller
 
 import com.ieum.account.controller.dto.request.UpdateAccountRequest
-import com.ieum.account.controller.dto.request.UpdatePasswordRequest
 import com.ieum.account.service.AccountService
 import com.ieum.web.response.BaseResponseEntity
 import jakarta.validation.Valid
@@ -34,17 +33,7 @@ class AccountController(
 		@AuthenticationPrincipal jwt: Jwt,
 		@Valid @RequestBody request: UpdateAccountRequest,
 	): BaseResponseEntity {
-		return BaseResponseEntity.single(accountService.updateNickname(requireNotNull(jwt.subject), request.nickname))
-	}
-
-	@PatchMapping("/me/password")
-	fun updatePassword(
-		@AuthenticationPrincipal jwt: Jwt,
-		@Valid @RequestBody request: UpdatePasswordRequest,
-	): BaseResponseEntity {
-		return BaseResponseEntity.single(
-			accountService.updatePassword(requireNotNull(jwt.subject), request.currentPassword, request.newPassword),
-		)
+		return BaseResponseEntity.single(accountService.updateAccount(requireNotNull(jwt.subject), request))
 	}
 
 	@GetMapping

@@ -58,7 +58,7 @@ class AccountControllerTest @Autowired constructor(
 		objectMapper.readTree(response).get("data")
 	}
 
-	private fun patch(uri: String, accessToken: String, body: String) = mockMvc.patch(uri) {
+	private fun updateMe(accessToken: String, body: String) = mockMvc.patch("/api/v1/account/me") {
 		header("Authorization", "Bearer $accessToken")
 		contentType = MediaType.APPLICATION_JSON
 		content = body
@@ -67,27 +67,38 @@ class AccountControllerTest @Autowired constructor(
 	private fun refresh(refreshToken: String) = post("/api/v1/auth/refresh", """{"refreshToken":"$refreshToken"}""")
 
 	private fun changePassword(accessToken: String, current: String, new: String) =
-		patch("/api/v1/account/me/password", accessToken, """{"currentPassword":"$current","newPassword":"$new"}""")
+		updateMe(accessToken, """{"currentPassword":"$current","newPassword":"$new"}""")
 
 	@Test
-	fun `nickname change returns the updated account`() {
+	fun `update changes only the sent fields`() {
 		val token = accessToken()
 
-		patch("/api/v1/account/me", token, """{"nickname":"tobi"}""").andExpect {
+		updateMe(token, """{"nickname":"tobi"}""").andExpect {
 			status { isOk() }
-			jsonPath("\$.data.nickname") { value("tobi") }
-			jsonPath("\$.data.email") { value("me@ieum.com") }
+			jsonPath("\$.data.account.nickname") { value("tobi") }
+			jsonPath("\$.data.account.birthDate") { value("1995-03-21") }
+			jsonPath("\$.data.account.email") { value("me@ieum.com") }
+			jsonPath("\$.data.token") { value(null) }
 		}
-		assertEquals("tobi", accountRepository.findAll().single().nickname)
+		updateMe(token, """{"birthDate":"2000-01-02"}""").andExpect { status { isOk() } }
+
+		val saved = accountRepository.findAll().single()
+		assertEquals("tobi", saved.nickname)
+		assertEquals(LocalDate.of(2000, 1, 2), saved.birthDate)
+		post("/api/v1/auth/login", """{"email":"me@ieum.com","password":"Pass123!"}""").andExpect { status { isOk() } }
 	}
 
 	@Test
-	fun `blank or too long nickname returns 400`() {
+	fun `invalid nickname or future birth date returns 400 and changes nothing`() {
 		val token = accessToken()
 
-		patch("/api/v1/account/me", token, """{"nickname":" "}""").andExpect { status { isBadRequest() } }
-		patch("/api/v1/account/me", token, """{"nickname":"${"a".repeat(21)}"}""").andExpect { status { isBadRequest() } }
-		assertEquals("me", accountRepository.findAll().single().nickname)
+		updateMe(token, """{"nickname":" "}""").andExpect { status { isBadRequest() } }
+		updateMe(token, """{"nickname":"${"a".repeat(21)}"}""").andExpect { status { isBadRequest() } }
+		updateMe(token, """{"nickname":"tobi","birthDate":"2999-01-01"}""").andExpect { status { isBadRequest() } }
+
+		val saved = accountRepository.findAll().single()
+		assertEquals("me", saved.nickname)
+		assertEquals(LocalDate.of(1995, 3, 21), saved.birthDate)
 	}
 
 	@Test
@@ -98,10 +109,13 @@ class AccountControllerTest @Autowired constructor(
 		val tablet = login()
 		val other = login("other@ieum.com")
 
-		val response = changePassword(phone.get("accessToken").asString(), "Pass123!", "NewPass1!")
-			.andExpect { status { isOk() } }
+		val response = updateMe(phone.get("accessToken").asString(), """{"nickname":"tobi","currentPassword":"Pass123!","newPassword":"NewPass1!"}""")
+			.andExpect {
+				status { isOk() }
+				jsonPath("\$.data.account.nickname") { value("tobi") }
+			}
 			.andReturn().response.contentAsString
-		val renewed = objectMapper.readTree(response).get("data")
+		val renewed = objectMapper.readTree(response).get("data").get("token")
 
 		refresh(phone.get("refreshToken").asString()).andExpect { status { isUnauthorized() } }
 		refresh(tablet.get("refreshToken").asString()).andExpect { status { isUnauthorized() } }
@@ -112,15 +126,21 @@ class AccountControllerTest @Autowired constructor(
 	}
 
 	@Test
-	fun `wrong current password returns 400 and keeps sessions`() {
+	fun `wrong or missing current password returns 400 and changes nothing`() {
 		signUp()
 		val session = login()
+		val token = session.get("accessToken").asString()
 
-		changePassword(session.get("accessToken").asString(), "Wrong123!", "NewPass1!").andExpect {
+		changePassword(token, "Wrong123!", "NewPass1!").andExpect {
 			status { isBadRequest() }
 			jsonPath("\$.message") { value("Current password is incorrect.") }
 		}
+		updateMe(token, """{"nickname":"tobi","newPassword":"NewPass1!"}""").andExpect {
+			status { isBadRequest() }
+			jsonPath("\$.message") { value("Current password is required.") }
+		}
 
+		assertEquals("me", accountRepository.findAll().single().nickname)
 		refresh(session.get("refreshToken").asString()).andExpect { status { isOk() } }
 		post("/api/v1/auth/login", """{"email":"me@ieum.com","password":"Pass123!"}""").andExpect { status { isOk() } }
 	}
@@ -135,10 +155,6 @@ class AccountControllerTest @Autowired constructor(
 		mockMvc.patch("/api/v1/account/me") {
 			contentType = MediaType.APPLICATION_JSON
 			content = """{"nickname":"tobi"}"""
-		}.andExpect { status { isUnauthorized() } }
-		mockMvc.patch("/api/v1/account/me/password") {
-			contentType = MediaType.APPLICATION_JSON
-			content = """{"currentPassword":"Pass123!","newPassword":"NewPass1!"}"""
 		}.andExpect { status { isUnauthorized() } }
 	}
 
