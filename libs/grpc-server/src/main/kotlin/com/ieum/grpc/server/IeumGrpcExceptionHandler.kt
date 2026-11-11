@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component
 
 // 서비스가 던진 IeumException 의 HTTP 상태를 gRPC 상태로 바꾼다. REST 의 GlobalExceptionInterceptor 와 같은 역할이다.
 // IllegalArgumentException 은 서버 버그도 던지므로 INVALID_ARGUMENT 로 바꾸지 않고 기본 처리(INTERNAL)에 맡긴다.
+// 503 은 이 서비스가 부른 다른 서비스의 장애라 UNAVAILABLE 로 넘겨 버그와 구분한다.
 @Component
 class IeumGrpcExceptionHandler : GrpcExceptionHandler {
 
@@ -17,6 +18,7 @@ class IeumGrpcExceptionHandler : GrpcExceptionHandler {
 		val status = when (errorCode.status) {
 			HttpStatus.NOT_FOUND -> Status.NOT_FOUND
 			HttpStatus.BAD_REQUEST -> Status.INVALID_ARGUMENT
+			HttpStatus.SERVICE_UNAVAILABLE -> Status.UNAVAILABLE
 			else -> return null
 		}
 

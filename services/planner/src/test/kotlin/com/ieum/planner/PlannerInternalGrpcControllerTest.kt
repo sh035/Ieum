@@ -239,7 +239,7 @@ class PlannerInternalGrpcControllerTest @Autowired constructor(
 
 		val e = assertFailsWith<StatusRuntimeException> { countsOn("2026-10-30") }
 
-		assertEquals(Status.Code.UNKNOWN, e.status.code)
+		assertEquals(Status.Code.UNAVAILABLE, e.status.code)
 	}
 
 	@Test
