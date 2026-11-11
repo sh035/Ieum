@@ -8,7 +8,7 @@ import com.ieum.proto.family.v1.GetFamilyIdsRequest
 import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRolesRequest
-import com.ieum.proto.family.v1.GetNicknamesRequest
+import com.ieum.proto.family.v1.GetMemberNicknamesRequest
 import org.springframework.grpc.client.GrpcChannelFactory
 import org.springframework.stereotype.Component
 import java.util.UUID
@@ -71,8 +71,8 @@ class GrpcFamilyClient(
 		}
 
 		val response = call {
-			it.getNicknames(
-				GetNicknamesRequest.newBuilder()
+			it.getMemberNicknames(
+				GetMemberNicknamesRequest.newBuilder()
 					.setFamilyId(familyId.toString())
 					.addAllAccountIds(accountIds.map(UUID::toString))
 					.build(),

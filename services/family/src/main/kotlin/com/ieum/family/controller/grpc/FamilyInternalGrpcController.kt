@@ -13,8 +13,8 @@ import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRoleResponse
 import com.ieum.proto.family.v1.GetMemberRolesRequest
 import com.ieum.proto.family.v1.GetMemberRolesResponse
-import com.ieum.proto.family.v1.GetNicknamesRequest
-import com.ieum.proto.family.v1.GetNicknamesResponse
+import com.ieum.proto.family.v1.GetMemberNicknamesRequest
+import com.ieum.proto.family.v1.GetMemberNicknamesResponse
 import io.grpc.stub.StreamObserver
 import org.springframework.stereotype.Service
 import java.util.UUID
@@ -71,11 +71,11 @@ class FamilyInternalGrpcController(
 		responseObserver.onCompleted()
 	}
 
-	override fun getNicknames(request: GetNicknamesRequest, responseObserver: StreamObserver<GetNicknamesResponse>) {
+	override fun getMemberNicknames(request: GetMemberNicknamesRequest, responseObserver: StreamObserver<GetMemberNicknamesResponse>) {
 		val nicknames = familyMemberService.getNicknames(request.familyId.toUuid(), request.accountIdsList.map { it.toUuid() })
 
 		responseObserver.onNext(
-			GetNicknamesResponse.newBuilder()
+			GetMemberNicknamesResponse.newBuilder()
 				.putAllNicknames(nicknames.entries.associate { (accountId, nickname) -> accountId.toString() to nickname })
 				.build(),
 		)

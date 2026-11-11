@@ -7,6 +7,8 @@ import com.ieum.family.domain.enums.FamilyRole
 import com.ieum.family.repository.FamilyInvitationRepository
 import com.ieum.family.repository.FamilyMemberRepository
 import com.ieum.family.repository.FamilyRepository
+import com.ieum.grpc.client.GrpcClientErrorCode
+import com.ieum.web.exception.IeumException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.`when`
@@ -74,8 +76,13 @@ class FamilyControllerTest @Autowired constructor(
 	}
 
 	@Test
-	fun `계정 닉네임을 못 찾으면 가족을 만들지 않고 404`() {
-		createFamily("우리집", accountId = UUID.randomUUID()).andExpect { status { isNotFound() } }
+	fun `계정 닉네임을 못 찾으면 404, account 장애면 503 이고 가족을 만들지 않는다`() {
+		createFamily("우리집", accountId = UUID.randomUUID()).andExpect {
+			status { isNotFound() }
+			jsonPath("\$.message") { value("Account not found.") }
+		}
+		`when`(accountClient.getNicknames(setOf(accountId))).thenThrow(IeumException(GrpcClientErrorCode.ACCOUNT_SERVICE_UNAVAILABLE))
+		createFamily("우리집").andExpect { status { isServiceUnavailable() } }
 
 		assertEquals(0, familyRepository.count())
 	}

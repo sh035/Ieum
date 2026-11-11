@@ -40,12 +40,15 @@ class FamilyMemberService(
 	}
 
 	// 이 가족에서 쓰는 내 닉네임은 본인만 바꾼다.
+	// 행 전체를 다시 쓰므로, 내보내기 / 소유권 넘기기와 겹쳐 옛 값을 되살리지 않게 다른 구성원 변경처럼 가족을 잠근다.
+	@Transactional
 	fun updateMyNickname(accountId: String, familyId: UUID, request: UpdateFamilyMemberNicknameRequest): FamilyMemberResponse {
+		familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId) ?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
 		val member = familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, UUID.fromString(accountId))
 			?: throw IeumException(FamilyErrorCode.FAMILY_NOT_FOUND)
 		member.nickname = request.nickname
 
-		return familyMemberRepository.save(member).toResponse()
+		return member.toResponse()
 	}
 
 	// 나간 구성원은 마지막으로 쓰던 닉네임이다. 다시 들어왔으면 지금 닉네임이다.

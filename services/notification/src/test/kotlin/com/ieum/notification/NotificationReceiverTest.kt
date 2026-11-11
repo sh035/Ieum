@@ -291,8 +291,18 @@ class NotificationReceiverTest @Autowired constructor(
 	}
 
 	@Test
-	fun `가족 닉네임이 없거나 조회가 실패하면 계정 닉네임을 쓴다`() {
+	fun `가족 닉네임 조회가 실패하면 계정 닉네임을 쓴다`() {
 		`when`(familyClient.getNicknames(familyId, setOf(mom))).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+
+		send(event(recipients = listOf(dad)))
+
+		awaitCount(1)
+		assertEquals("엄마님이 할 일을 맡겼어요", notificationRepository.findAll().single().title)
+	}
+
+	@Test
+	fun `그 가족 구성원이었던 적 없는 사람은 계정 닉네임을 쓴다`() {
+		`when`(familyClient.getNicknames(familyId, setOf(mom))).thenReturn(emptyMap())
 
 		send(event(recipients = listOf(dad)))
 

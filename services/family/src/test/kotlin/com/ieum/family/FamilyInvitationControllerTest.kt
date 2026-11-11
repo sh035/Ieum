@@ -31,6 +31,7 @@ import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -216,6 +217,37 @@ class FamilyInvitationControllerTest @Autowired constructor(
 			jsonPath("\$.data[0].inviterAccountId") { value(ownerId.toString()) }
 			jsonPath("\$.data[0].inviterNickname") { value("우리 엄마") }
 		}
+	}
+
+	@Test
+	fun `받은 초대의 초대한 사람 이름은 그 가족에서 쓰는 닉네임이다`() {
+		val home = createFamily()
+		val inlaws = requireNotNull(familyRepository.save(Family(name = "시댁")).familyId)
+		familyMemberRepository.save(FamilyMember(familyId = inlaws, accountId = ownerId, role = FamilyRole.OWNER, nickname = "며느리"))
+		invite(home).andExpect { status { isCreated() } }
+		invite(inlaws).andExpect { status { isCreated() } }
+
+		getReceived().andExpect {
+			jsonPath("\$.data.length()") { value(2) }
+			jsonPath("\$.data[?(@.familyName == '우리집')].inviterNickname") { value("우리 엄마") }
+			jsonPath("\$.data[?(@.familyName == '시댁')].inviterNickname") { value("며느리") }
+		}
+	}
+
+	@Test
+	fun `수락할 때 계정 닉네임을 못 찾으면 404, account 장애면 503 이고 가입되지 않는다`() {
+		val familyId = createFamily()
+		val invitationId = inviteId(familyId)
+
+		`when`(accountClient.getNicknames(setOf(inviteeId))).thenReturn(emptyMap())
+		accept(invitationId).andExpect {
+			status { isNotFound() }
+			jsonPath("\$.message") { value("Account not found.") }
+		}
+		`when`(accountClient.getNicknames(setOf(inviteeId))).thenThrow(IeumException(GrpcClientErrorCode.ACCOUNT_SERVICE_UNAVAILABLE))
+		accept(invitationId).andExpect { status { isServiceUnavailable() } }
+
+		assertNull(familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeId))
 	}
 
 	@Test

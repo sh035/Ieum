@@ -11,7 +11,7 @@ import com.ieum.proto.family.v1.GetFamilyIdsRequest
 import com.ieum.proto.family.v1.GetFamilyRequest
 import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRolesRequest
-import com.ieum.proto.family.v1.GetNicknamesRequest
+import com.ieum.proto.family.v1.GetMemberNicknamesRequest
 import io.grpc.Status
 import io.grpc.StatusRuntimeException
 import org.junit.jupiter.api.BeforeEach
@@ -60,13 +60,16 @@ class FamilyInternalGrpcControllerTest @Autowired constructor(
 		val familyId = createFamily()
 		val left = UUID.randomUUID()
 		val rejoined = UUID.randomUUID()
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = left, role = FamilyRole.MEMBER, nickname = "작은삼촌").apply { delete() })
 		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = left, role = FamilyRole.MEMBER, nickname = "삼촌").apply { delete() })
 		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = rejoined, role = FamilyRole.MEMBER, nickname = "옛 이름").apply { delete() })
 		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = rejoined, role = FamilyRole.MEMBER, nickname = "새 이름"))
-		familyMemberRepository.save(FamilyMember(familyId = createFamily(), accountId = UUID.randomUUID(), role = FamilyRole.MEMBER, nickname = "남"))
+		val otherFamilyId = requireNotNull(familyRepository.save(Family(name = "본가")).familyId)
+		familyMemberRepository.save(FamilyMember(familyId = otherFamilyId, accountId = ownerId, role = FamilyRole.MEMBER, nickname = "막내"))
+		familyMemberRepository.save(FamilyMember(familyId = otherFamilyId, accountId = left, role = FamilyRole.MEMBER, nickname = "형"))
 
-		val response = stub.getNicknames(
-			GetNicknamesRequest.newBuilder()
+		val response = stub.getMemberNicknames(
+			GetMemberNicknamesRequest.newBuilder()
 				.setFamilyId(familyId.toString())
 				.addAllAccountIds(listOf(ownerId, left, rejoined, UUID.randomUUID()).map(UUID::toString))
 				.build(),
