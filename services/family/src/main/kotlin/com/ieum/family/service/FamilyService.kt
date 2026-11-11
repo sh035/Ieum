@@ -10,7 +10,7 @@ import com.ieum.family.controller.dto.response.CreateFamilyResponse
 import com.ieum.family.controller.dto.response.FamilyInfoResponse
 import com.ieum.family.controller.dto.response.FamilyResponse
 import com.ieum.family.controller.dto.response.FamilySummaryResponse
-import com.ieum.family.controller.dto.response.LeaveAllFamiliesResult
+import com.ieum.family.controller.dto.response.LeaveAllFamiliesResponse
 import com.ieum.family.controller.dto.response.WithdrawalCheckResponse
 import com.ieum.family.domain.entity.Family
 import com.ieum.family.domain.entity.FamilyMember
@@ -111,23 +111,22 @@ class FamilyService(
 
 	// 탈퇴하는 계정을 모든 가족에서 내보낸다. 확인과 나가기 사이에 누가 들어오거나 나가지 않게 내 가족을 모두 잠근 뒤 다시 확인한다.
 	@Transactional
-	fun leaveAllFamilies(accountId: UUID, deleteSoloFamilies: Boolean): LeaveAllFamiliesResult {
+	fun leaveAllFamilies(accountId: UUID, deleteSoloFamilies: Boolean): LeaveAllFamiliesResponse {
 		// 여러 가족을 잠그므로 순서를 맞춰 다른 탈퇴와 교착되지 않게 한다.
-		familyMemberRepository.findAllByAccountIdAndIsDeletedFalseOrderByCreatedAt(accountId)
-			.map { it.familyId }
+		val lockedFamilyIds = familyMemberRepository.findFamilyIdsByAccountId(accountId)
 			.sorted()
-			.forEach { familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(it) }
+			.mapNotNull { familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(it)?.familyId }
 
 		val check = withdrawalCheck(accountId)
 		if (check.transferRequiredFamilies.isNotEmpty() || (check.soloFamilies.isNotEmpty() && !deleteSoloFamilies)) {
-			return LeaveAllFamiliesResult(left = false, check = check)
+			return LeaveAllFamiliesResponse(left = false, check = check)
 		}
 
-		familyMemberRepository.findAllByAccountIdAndIsDeletedFalseOrderByCreatedAt(accountId).forEach { leave(accountId.toString(), it.familyId) }
+		lockedFamilyIds.forEach { leave(accountId.toString(), it) }
 		familyInvitationRepository.findAllByInviteeAccountIdAndIsDeletedFalseOrderByCreatedAt(accountId).forEach { it.delete() }
 		log.debug("Left all families for withdrawal. accountId={}", accountId)
 
-		return LeaveAllFamiliesResult(left = true, check = check)
+		return LeaveAllFamiliesResponse(left = true, check = check)
 	}
 
 	private fun withdrawalCheck(accountId: UUID): WithdrawalCheckResponse {

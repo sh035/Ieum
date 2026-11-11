@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
@@ -44,9 +46,9 @@ class AccountService(
 			throw IeumException(AccountErrorCode.DUPLICATE_EMAIL)
 		}
 		// 탈퇴와 재가입을 반복하지 못하게 같은 이메일은 탈퇴 3일 뒤부터 받는다. 탈퇴한 계정은 더 바뀌지 않아 updatedAt 이 탈퇴 시각이다.
-		accountRepository.findFirstByEmailAndIsDeletedTrueOrderByUpdatedAtDesc(request.email)?.updatedAt
-			?.takeIf { it.isAfter(LocalDateTime.now().minus(REJOIN_WAIT)) }
-			?.let { throw IeumException(AccountErrorCode.REJOIN_TOO_SOON) }
+		if (accountRepository.existsByEmailAndIsDeletedTrueAndUpdatedAtAfter(request.email, LocalDateTime.now().minus(REJOIN_WAIT))) {
+			throw IeumException(AccountErrorCode.REJOIN_TOO_SOON)
+		}
 
 		val account = accountRepository.save(
 			Account(
@@ -69,6 +71,10 @@ class AccountService(
 	fun reissue(refreshToken: String): TokenResponse {
 		val accountId = refreshTokenRepository.findAccountId(refreshToken)
 			?: throw IeumException(AccountErrorCode.INVALID_CREDENTIALS)
+		// 탈퇴와 겹쳐 발급된 토큰이 남아도 탈퇴한 계정에는 새 access token 을 주지 않는다.
+		if (accountRepository.findById(UUID.fromString(accountId)).filter { !it.isDeleted }.isEmpty) {
+			throw IeumException(AccountErrorCode.INVALID_CREDENTIALS)
+		}
 
 		return TokenResponse(
 			accessToken = jwtProvider.createAccessToken(accountId),
@@ -130,7 +136,10 @@ class AccountService(
 		account.delete()
 		accountRepository.save(account)
 		accountEventPublisher.publish(AccountEventType.ACCOUNT_DELETED, AccountEventData(accountId = requireNotNull(account.accountId)))
-		refreshTokenRepository.revokeAll(accountId)
+		// Redis 오류로 탈퇴가 롤백되지 않게 커밋 뒤에 끊는다. 실패해도 reissue 가 탈퇴한 계정을 막는다.
+		TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+			override fun afterCommit() = refreshTokenRepository.revokeAll(accountId)
+		})
 		log.debug("Account withdrawn. accountId={}", accountId)
 	}
 

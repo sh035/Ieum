@@ -115,6 +115,18 @@ class AccountWithdrawalTest @Autowired constructor(
 	}
 
 	@Test
+	fun `탈퇴한 계정의 refresh token 이 남아 있어도 재발급하지 않는다`() {
+		val (accessToken, refreshToken, accountId) = signedUp()
+		`when`(familyClient.leaveAllFamilies(accountId, false)).thenReturn(leaveResult(left = true))
+		// 탈퇴와 겹쳐 발급돼 끊기지 않은 토큰을 흉내 내려고 탈퇴 뒤 Redis 에 다시 넣는다.
+		val key = redisTemplate.keys("refresh:*").single()
+		withdraw(accessToken).andExpect { status { isNoContent() } }
+		redisTemplate.opsForValue().set(key, accountId.toString())
+
+		post("/api/v1/auth/refresh", """{"refreshToken":"$refreshToken"}""").andExpect { status { isUnauthorized() } }
+	}
+
+	@Test
 	fun `비밀번호가 틀리면 400 이고 가족에서 나가지 않는다`() {
 		val (accessToken, _, _) = signedUp()
 

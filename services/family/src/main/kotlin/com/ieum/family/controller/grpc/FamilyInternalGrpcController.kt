@@ -18,7 +18,6 @@ import com.ieum.proto.family.v1.GetMemberRoleResponse
 import com.ieum.proto.family.v1.GetMemberRolesRequest
 import com.ieum.proto.family.v1.GetMemberRolesResponse
 import com.ieum.proto.family.v1.LeaveAllFamiliesRequest
-import com.ieum.proto.family.v1.LeaveAllFamiliesResponse
 import com.ieum.proto.family.v1.WithdrawalCheck
 import com.ieum.proto.family.v1.GetMemberNicknamesRequest
 import com.ieum.proto.family.v1.GetMemberNicknamesResponse
@@ -27,6 +26,7 @@ import org.springframework.stereotype.Service
 import java.util.UUID
 import com.ieum.proto.family.v1.FamilyMember as ProtoFamilyMember
 import com.ieum.proto.family.v1.FamilyRole as ProtoFamilyRole
+import com.ieum.proto.family.v1.LeaveAllFamiliesResponse as ProtoLeaveAllFamiliesResponse
 
 // 서비스 간 호출 전용. Gateway 에 노출하지 않는다. 예외는 IeumGrpcExceptionHandler 가 gRPC 상태로 바꾼다.
 @Service
@@ -94,10 +94,10 @@ class FamilyInternalGrpcController(
 		responseObserver.onCompleted()
 	}
 
-	override fun leaveAllFamilies(request: LeaveAllFamiliesRequest, responseObserver: StreamObserver<LeaveAllFamiliesResponse>) {
+	override fun leaveAllFamilies(request: LeaveAllFamiliesRequest, responseObserver: StreamObserver<ProtoLeaveAllFamiliesResponse>) {
 		val result = familyService.leaveAllFamilies(request.accountId.toUuid(), request.deleteSoloFamilies)
 
-		responseObserver.onNext(LeaveAllFamiliesResponse.newBuilder().setLeft(result.left).setCheck(result.check.toProto()).build())
+		responseObserver.onNext(ProtoLeaveAllFamiliesResponse.newBuilder().setLeft(result.left).setCheck(result.check.toProto()).build())
 		responseObserver.onCompleted()
 	}
 

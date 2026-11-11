@@ -16,12 +16,14 @@ class AccountEventReceiver(
 	private val notificationInboxService: NotificationInboxService,
 ) {
 
-	// 실패하면 알림 이벤트와 같은 오류 처리기로 다시 시도한 뒤 ieum.notification.DLT 로 간다.
+	// 처리에 실패하면 알림 이벤트와 같은 오류 처리기로 다시 시도한 뒤 ieum.notification.DLT 로 간다.
 	@KafkaListener(topics = [Topics.ACCOUNT])
 	fun receive(message: String) {
 		val event = objectMapper.readValue<IeumEvent<AccountEventData>>(message)
-		// 지금은 ACCOUNT_DELETED 하나뿐이다. 모르는 타입은 IllegalArgumentException 으로 바로 DLT 에 간다.
-		AccountEventType.valueOf(event.eventType)
+		// 다른 계정 이벤트가 생겨도 지우는 건 탈퇴뿐이다.
+		if (event.eventType != AccountEventType.ACCOUNT_DELETED.name) {
+			return
+		}
 
 		deviceTokenService.deleteAll(event.data.accountId)
 		notificationInboxService.deleteAll(event.data.accountId)

@@ -1,6 +1,6 @@
 package com.ieum.family.controller.dto.response
 
-data class LeaveAllFamiliesResult(
+data class LeaveAllFamiliesResponse(
 	val left: Boolean,
 	val check: WithdrawalCheckResponse,
 )

@@ -1,6 +1,7 @@
 package com.ieum.notification.service
 
 import com.ieum.events.NotificationEventType
+import com.ieum.grpc.client.account.AccountClient
 import com.ieum.grpc.client.grocery.GroceryClient
 import com.ieum.grpc.client.planner.PlannerClient
 import com.ieum.notification.domain.enums.BriefingItem
@@ -16,6 +17,7 @@ import java.util.UUID
 class BriefingService(
 	private val plannerClient: PlannerClient,
 	private val groceryClient: GroceryClient,
+	private val accountClient: AccountClient,
 	private val deviceTokenRepository: DeviceTokenRepository,
 	private val notificationService: NotificationService,
 	private val composer: NotificationMessageComposer,
@@ -40,7 +42,7 @@ class BriefingService(
 		grocery?.forEach { (accountId, count) -> counts.getOrPut(accountId) { mutableMapOf() }[BriefingItem.EXPIRING] = count }
 
 		val recipients = if (planner != null && grocery != null) {
-			counts.keys + deviceTokenRepository.findAllByIsDeletedFalse().map { it.accountId }
+			counts.keys + activeTokenHolders(counts.keys)
 		} else {
 			counts.keys
 		}
@@ -58,6 +60,15 @@ class BriefingService(
 				log.warn("Briefing save failed. accountId={}", accountId, e)
 			}
 		}
+	}
+
+	// 챙길 게 없어도 빈 브리핑을 받는 기기 토큰 주인이다. 탈퇴 이벤트를 놓쳐 남은 토큰에 보내지 않게 탈퇴한 계정은 뺀다.
+	private fun activeTokenHolders(exclude: Set<UUID>): Set<UUID> {
+		val holders = deviceTokenRepository.findAllByIsDeletedFalse().map { it.accountId }.toSet() - exclude
+		if (holders.isEmpty()) {
+			return emptySet()
+		}
+		return fetch("account") { accountClient.getNicknames(holders).keys }.orEmpty()
 	}
 
 	// 배포 직후 첫 호출은 연결과 초기화로 deadline 을 넘기기 쉬워서 한 번 더 묻는다. 읽기 전용이라 다시 물어도 안전하다.

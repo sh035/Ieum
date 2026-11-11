@@ -97,6 +97,10 @@ class FamilyWithdrawalTest @Autowired constructor(
 	fun `혼자인 가족 삭제에 동의하지 않으면 아무 가족에서도 나가지 않는다`() {
 		val solo = family("혼자", me)
 		val joined = family("본가", mom, me)
+		val inviting = family("이웃", mom)
+		familyInvitationRepository.save(
+			FamilyInvitation(familyId = inviting, inviterAccountId = mom, inviteeAccountId = me, expiresAt = LocalDateTime.now().plusHours(1)),
+		)
 
 		val response = leaveAll(deleteSoloFamilies = false)
 
@@ -104,6 +108,7 @@ class FamilyWithdrawalTest @Autowired constructor(
 		assertEquals(listOf(solo.toString()), response.check.soloFamiliesList.map { it.familyId })
 		assertTrue(isMember(solo))
 		assertTrue(isMember(joined))
+		assertEquals(1, familyInvitationRepository.findAllByInviteeAccountIdAndIsDeletedFalseOrderByCreatedAt(me).size)
 	}
 
 	@Test

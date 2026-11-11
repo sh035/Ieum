@@ -16,7 +16,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 // 커밋된 탈퇴만 알리도록 트랜잭션 안에서 쌓고 커밋 후 Kafka 로 보낸다.
-// 전송이 실패하면 notification 의 기기 토큰 / 알림함이 남지만 탈퇴자는 가족에 없어 알림을 받지 않는다. 정리할 서비스가 늘면 outbox 로 바꾼다.
+// 전송이 실패하면 notification 의 기기 토큰 / 알림함이 남는다. 브리핑은 탈퇴한 계정을 걸러서 보내지 않는다. 정리할 서비스가 늘면 outbox 로 바꾼다.
 @Component
 class AccountEventPublisher(
 	private val applicationEventPublisher: ApplicationEventPublisher,
@@ -41,9 +41,9 @@ class AccountEventPublisher(
 		try {
 			val message = objectMapper.writeValueAsString(IeumEvent(UUID.randomUUID(), event.type.name, LocalDateTime.now(), event.data))
 			kafkaTemplate.send(Topics.ACCOUNT, event.data.accountId.toString(), message)
-				?.whenComplete { _, e -> e?.let { log.warn("Account event send failed. type={}", event.type, it) } }
+				?.whenComplete { _, e -> e?.let { log.error("Account event send failed. type={}, accountId={}", event.type, event.data.accountId, it) } }
 		} catch (e: Exception) {
-			log.warn("Account event send failed. type={}", event.type, e)
+			log.error("Account event send failed. type={}, accountId={}", event.type, event.data.accountId, e)
 		}
 	}
 }
