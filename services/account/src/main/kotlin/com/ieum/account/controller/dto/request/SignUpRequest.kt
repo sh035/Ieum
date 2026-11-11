@@ -15,11 +15,8 @@ data class SignUpRequest(
 	val email: String,
 
 	@NotBlank(message = "Password is required.")
-	@Size(min = 8, max = 16, message = "Password must be between 8 and 16 characters.")
-	@Pattern(
-		regexp = "^(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z0-9]).+$",
-		message = "Password must contain letters, digits and special characters.",
-	)
+	@Size(min = PasswordPolicy.MIN, max = PasswordPolicy.MAX, message = PasswordPolicy.SIZE_MESSAGE)
+	@Pattern(regexp = PasswordPolicy.REGEXP, message = PasswordPolicy.REGEXP_MESSAGE)
 	val password: String,
 
 	@NotBlank(message = "Nickname is required.")

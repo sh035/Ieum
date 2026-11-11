@@ -1,9 +1,11 @@
 package com.ieum.account.service
 
 import com.ieum.account.controller.dto.request.SignUpRequest
+import com.ieum.account.controller.dto.request.UpdateAccountRequest
 import com.ieum.account.controller.dto.response.AccountProfileResponse
 import com.ieum.account.controller.dto.response.AccountResponse
 import com.ieum.account.controller.dto.response.TokenResponse
+import com.ieum.account.controller.dto.response.UpdateAccountResponse
 import com.ieum.account.domain.entity.Account
 import com.ieum.account.exception.AccountErrorCode
 import com.ieum.account.repository.AccountRepository
@@ -62,17 +64,37 @@ class AccountService(
 		refreshTokenRepository.revoke(refreshToken)
 	}
 
-	fun getAccount(accountId: String): AccountResponse {
-		val account = accountRepository.findById(UUID.fromString(accountId))
+	fun getAccount(accountId: String): AccountResponse = findActive(accountId).toResponse()
+
+	// 보낸 필드만 바꾼다. 비밀번호를 바꾸면 모든 기기의 refresh token 을 끊고 지금 기기에만 새로 발급한다.
+	fun updateAccount(accountId: String, request: UpdateAccountRequest): UpdateAccountResponse {
+		val account = findActive(accountId)
+		request.newPassword?.let { newPassword ->
+			val currentPassword = request.currentPassword ?: throw IeumException(AccountErrorCode.CURRENT_PASSWORD_REQUIRED)
+			if (!passwordEncoder.matches(currentPassword, account.password)) {
+				throw IeumException(AccountErrorCode.WRONG_CURRENT_PASSWORD)
+			}
+			account.password = requireNotNull(passwordEncoder.encode(newPassword))
+		}
+		request.nickname?.let { account.nickname = it }
+		request.birthDate?.let { account.birthDate = it }
+
+		val saved = accountRepository.save(account)
+		if (request.newPassword == null) {
+			return UpdateAccountResponse(account = saved.toResponse(), token = null)
+		}
+
+		refreshTokenRepository.revokeAll(accountId)
+		log.debug("Password changed. accountId={}", accountId)
+		return UpdateAccountResponse(account = saved.toResponse(), token = issueTokens(accountId))
+	}
+
+	private fun findActive(accountId: String): Account =
+		accountRepository.findById(UUID.fromString(accountId))
 			.filter { !it.isDeleted }
 			.orElseThrow { IeumException(AccountErrorCode.ACCOUNT_NOT_FOUND) }
 
-		return AccountResponse(
-			email = account.email,
-			nickname = account.nickname,
-			birthDate = account.birthDate,
-		)
-	}
+	private fun Account.toResponse() = AccountResponse(email = email, nickname = nickname, birthDate = birthDate)
 
 	// 없거나 탈퇴한 계정이면 ACCOUNT_NOT_FOUND 다.
 	fun findProfileByEmail(email: String): AccountProfileResponse {
