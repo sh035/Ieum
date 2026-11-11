@@ -26,6 +26,12 @@ class NotificationInboxService(
 	private val familyClient: FamilyClient,
 ) {
 
+	// 탈퇴한 계정의 알림함을 비운다. 같은 이벤트가 다시 와도 지울 것이 없을 뿐이다.
+	@Transactional
+	fun deleteAll(accountId: UUID) {
+		notificationRepository.softDeleteAllByAccountId(accountId, LocalDateTime.now())
+	}
+
 	@Transactional(readOnly = true)
 	fun getNotifications(accountId: String, tab: NotificationTab, familyId: UUID?, page: Int, size: Int): Page<NotificationResponse> {
 		val me = UUID.fromString(accountId)
