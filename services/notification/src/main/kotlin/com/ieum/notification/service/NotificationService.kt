@@ -37,7 +37,11 @@ class NotificationService(
 			return
 		}
 
-		val nickname = data.actorAccountId?.let { actor -> lookup { accountClient.getNicknames(setOf(actor))[actor] } }
+		// 그 가족에서 쓰는 닉네임이 먼저다. 구성원이었던 적 없는 사람(초대를 거절한 사람)은 계정 닉네임이다.
+		val nickname = data.actorAccountId?.let { actor ->
+			data.familyId?.let { familyId -> lookup { familyClient.getNicknames(familyId, setOf(actor))[actor] } }
+				?: lookup { accountClient.getNicknames(setOf(actor))[actor] }
+		}
 		val familyName = data.familyId
 			?.takeIf { type in FAMILY_NAME_TYPES }
 			?.let { familyId -> lookup { familyClient.getFamily(familyId)?.name } }

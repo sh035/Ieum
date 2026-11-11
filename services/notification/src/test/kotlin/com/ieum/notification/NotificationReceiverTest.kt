@@ -18,6 +18,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
@@ -276,6 +277,27 @@ class NotificationReceiverTest @Autowired constructor(
 
 		awaitCount(1)
 		assertEquals("가".repeat(50) + "… · 10/30(금) 19:00", notificationRepository.findAll().single().body)
+	}
+
+	@Test
+	fun `문구에는 그 가족에서 쓰는 닉네임을 쓴다`() {
+		`when`(familyClient.getNicknames(familyId, setOf(mom))).thenReturn(mapOf(mom to "우리 엄마"))
+
+		send(event(recipients = listOf(dad)))
+
+		awaitCount(1)
+		assertEquals("우리 엄마님이 할 일을 맡겼어요", notificationRepository.findAll().single().title)
+		verify(accountClient, never()).getNicknames(setOf(mom))
+	}
+
+	@Test
+	fun `가족 닉네임이 없거나 조회가 실패하면 계정 닉네임을 쓴다`() {
+		`when`(familyClient.getNicknames(familyId, setOf(mom))).thenThrow(IeumException(GrpcClientErrorCode.FAMILY_SERVICE_UNAVAILABLE))
+
+		send(event(recipients = listOf(dad)))
+
+		awaitCount(1)
+		assertEquals("엄마님이 할 일을 맡겼어요", notificationRepository.findAll().single().title)
 	}
 
 	@Test
