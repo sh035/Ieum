@@ -10,5 +10,7 @@ interface AccountRepository : JpaRepository<Account, UUID> {
 
 	fun findByEmailAndIsDeletedFalse(email: String): Account?
 
+	fun findFirstByEmailAndIsDeletedTrueOrderByUpdatedAtDesc(email: String): Account?
+
 	fun findAllByAccountIdInAndIsDeletedFalse(accountIds: Collection<UUID>): List<Account>
 }

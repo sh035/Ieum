@@ -7,19 +7,24 @@ CREATE SCHEMA expense;
 CREATE SCHEMA notification;
 
 -- 회원 계정
--- - 이메일은 탈퇴한 계정까지 포함해 겹치지 않는다
+-- - 이메일은 탈퇴하지 않은 계정끼리 겹치지 않는다. 같은 이메일 재가입은 탈퇴 3일 뒤부터 된다
 -- - 다른 서비스는 account_id 로만 참조하고 닉네임은 gRPC 로 조회한다
 CREATE TABLE account.account
 (
 	account_id uuid PRIMARY KEY,               -- 계정 ID
-	email      varchar(255) NOT NULL UNIQUE,   -- 로그인 이메일, 가족 초대 시 계정 찾기에도 쓴다
+	email      varchar(255) NOT NULL,          -- 로그인 이메일, 가족 초대 시 계정 찾기에도 쓴다
 	nickname   varchar(255) NOT NULL,          -- 화면과 알림 문구에 쓰는 이름
 	password   varchar(255) NOT NULL,          -- 해시한 비밀번호
 	birth_date date         NOT NULL,          -- 생년월일
 	created_at timestamp(6) NOT NULL,          -- 가입 시각
-	updated_at timestamp(6),                   -- 마지막 수정 시각
+	updated_at timestamp(6),                   -- 마지막 수정 시각. 탈퇴한 계정은 탈퇴 시각
 	is_deleted boolean      NOT NULL DEFAULT false -- 탈퇴 여부
 );
+
+-- 탈퇴한 계정과 같은 이메일로 다시 가입할 수 있도록 탈퇴하지 않은 행에만 건다.
+CREATE UNIQUE INDEX uk_account_email
+	ON account.account (email)
+	WHERE is_deleted = false;
 
 -- 가족
 -- - 만든 사람이 OWNER 가 된다
