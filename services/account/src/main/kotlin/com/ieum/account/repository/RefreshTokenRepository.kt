@@ -35,9 +35,11 @@ class RefreshTokenRepository(
 	}
 
 	fun revokeAll(accountId: String) {
+		// Set 을 통째로 지우면 그 사이 새로 발급된 토큰까지 목록에서 빠지므로 읽은 것만 뺀다.
 		val hashes = redisTemplate.opsForSet().members(ACCOUNT_PREFIX + accountId).orEmpty()
+		if (hashes.isEmpty()) return
 		redisTemplate.delete(hashes.map { TOKEN_PREFIX + it })
-		redisTemplate.delete(ACCOUNT_PREFIX + accountId)
+		redisTemplate.opsForSet().remove(ACCOUNT_PREFIX + accountId, *hashes.toTypedArray())
 	}
 
 	private fun hash(token: String): String =

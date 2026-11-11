@@ -38,16 +38,21 @@ class AccountControllerTest @Autowired constructor(
 			Account(email = email, password = "hashed", nickname = nickname, birthDate = LocalDate.of(1995, 3, 21)),
 		)
 
-	private fun accessToken(): String = login().get("accessToken").asString()
+	private fun accessToken(): String = run { signUp(); login() }.get("accessToken").asString()
 
 	private fun post(uri: String, body: String) = mockMvc.post(uri) {
 		contentType = MediaType.APPLICATION_JSON
 		content = body
 	}
 
-	private fun login(password: String = "Pass123!") = run {
-		post("/api/v1/auth/sign-up", """{"email":"me@ieum.com","password":"Pass123!","nickname":"me","birthDate":"1995-03-21"}""")
-		val response = post("/api/v1/auth/login", """{"email":"me@ieum.com","password":"$password"}""")
+	private fun signUp(email: String = "me@ieum.com") {
+		post("/api/v1/auth/sign-up", """{"email":"$email","password":"Pass123!","nickname":"me","birthDate":"1995-03-21"}""")
+			.andExpect { status { isCreated() } }
+	}
+
+	private fun login(email: String = "me@ieum.com") = run {
+		val response = post("/api/v1/auth/login", """{"email":"$email","password":"Pass123!"}""")
+			.andExpect { status { isOk() } }
 			.andReturn().response.contentAsString
 
 		objectMapper.readTree(response).get("data")
@@ -87,8 +92,11 @@ class AccountControllerTest @Autowired constructor(
 
 	@Test
 	fun `password change revokes every refresh token and issues new tokens`() {
+		signUp()
+		signUp("other@ieum.com")
 		val phone = login()
 		val tablet = login()
+		val other = login("other@ieum.com")
 
 		val response = changePassword(phone.get("accessToken").asString(), "Pass123!", "NewPass1!")
 			.andExpect { status { isOk() } }
@@ -98,15 +106,20 @@ class AccountControllerTest @Autowired constructor(
 		refresh(phone.get("refreshToken").asString()).andExpect { status { isUnauthorized() } }
 		refresh(tablet.get("refreshToken").asString()).andExpect { status { isUnauthorized() } }
 		refresh(renewed.get("refreshToken").asString()).andExpect { status { isOk() } }
+		refresh(other.get("refreshToken").asString()).andExpect { status { isOk() } }
 		post("/api/v1/auth/login", """{"email":"me@ieum.com","password":"Pass123!"}""").andExpect { status { isUnauthorized() } }
 		post("/api/v1/auth/login", """{"email":"me@ieum.com","password":"NewPass1!"}""").andExpect { status { isOk() } }
 	}
 
 	@Test
 	fun `wrong current password returns 400 and keeps sessions`() {
+		signUp()
 		val session = login()
 
-		changePassword(session.get("accessToken").asString(), "Wrong123!", "NewPass1!").andExpect { status { isBadRequest() } }
+		changePassword(session.get("accessToken").asString(), "Wrong123!", "NewPass1!").andExpect {
+			status { isBadRequest() }
+			jsonPath("\$.message") { value("Current password is incorrect.") }
+		}
 
 		refresh(session.get("refreshToken").asString()).andExpect { status { isOk() } }
 		post("/api/v1/auth/login", """{"email":"me@ieum.com","password":"Pass123!"}""").andExpect { status { isOk() } }
