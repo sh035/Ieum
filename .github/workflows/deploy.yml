@@ -18,5 +18,8 @@ jobs:
           distribution: 'temurin'
 
       - uses: gradle/actions/setup-gradle@v6
+        with:
+          # 기본값은 기본 브랜치에서만 캐시를 저장한다. 작업은 develop 에 쌓이므로 develop 도 저장한다.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
 
       - run: ./gradlew build
