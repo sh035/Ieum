@@ -8,5 +8,6 @@ data class FamilyMemberResponse(
 	val familyMemberId: UUID,
 	val accountId: UUID,
 	val role: FamilyRole,
+	val nickname: String,
 	val joinedAt: LocalDateTime,
 )

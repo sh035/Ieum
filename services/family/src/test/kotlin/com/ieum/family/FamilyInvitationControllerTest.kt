@@ -63,8 +63,8 @@ class FamilyInvitationControllerTest @Autowired constructor(
 
 	private fun createFamily(name: String = "우리집"): UUID {
 		val familyId = requireNotNull(familyRepository.save(Family(name = name)).familyId)
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER))
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = memberId, role = FamilyRole.MEMBER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER, nickname = "우리 엄마"))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = memberId, role = FamilyRole.MEMBER, nickname = "구성원"))
 		return familyId
 	}
 
@@ -214,7 +214,7 @@ class FamilyInvitationControllerTest @Autowired constructor(
 			jsonPath("\$.data[0].familyId") { value(familyId.toString()) }
 			jsonPath("\$.data[0].familyName") { value("우리집") }
 			jsonPath("\$.data[0].inviterAccountId") { value(ownerId.toString()) }
-			jsonPath("\$.data[0].inviterNickname") { value("엄마") }
+			jsonPath("\$.data[0].inviterNickname") { value("우리 엄마") }
 		}
 	}
 
@@ -230,7 +230,9 @@ class FamilyInvitationControllerTest @Autowired constructor(
 			jsonPath("\$.data.role") { value("MEMBER") }
 		}
 
-		assertEquals(FamilyRole.MEMBER, familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeId)?.role)
+		val joined = requireNotNull(familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeId))
+		assertEquals(FamilyRole.MEMBER, joined.role)
+		assertEquals("막내", joined.nickname)
 		accept(invitationId).andExpect { status { isNotFound() } }
 		getReceived().andExpect { jsonPath("\$.data.length()") { value(0) } }
 	}
@@ -251,7 +253,7 @@ class FamilyInvitationControllerTest @Autowired constructor(
 	fun `동시 수락으로 exists 확인을 통과해도 409`() {
 		val familyId = createFamily()
 		val invitationId = inviteId(familyId)
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = inviteeId, role = FamilyRole.MEMBER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = inviteeId, role = FamilyRole.MEMBER, nickname = "구성원"))
 		doReturn(false).`when`(familyMemberRepositorySpy).existsByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, inviteeId)
 
 		accept(invitationId).andExpect { status { isConflict() } }
@@ -274,7 +276,7 @@ class FamilyInvitationControllerTest @Autowired constructor(
 		val familyId = createFamily()
 		val neighborOwner = UUID.randomUUID()
 		val neighborFamilyId = requireNotNull(familyRepository.save(Family(name = "옆집")).familyId)
-		familyMemberRepository.save(FamilyMember(familyId = neighborFamilyId, accountId = neighborOwner, role = FamilyRole.OWNER))
+		familyMemberRepository.save(FamilyMember(familyId = neighborFamilyId, accountId = neighborOwner, role = FamilyRole.OWNER, nickname = "구성원"))
 		val neighborInvitationId = familyInvitationRepository.save(
 			FamilyInvitation(familyId = neighborFamilyId, inviterAccountId = neighborOwner, inviteeAccountId = inviteeId, expiresAt = LocalDateTime.now().plusHours(1)),
 		).familyInvitationId

@@ -48,8 +48,8 @@ class FamilyMemberControllerTest @Autowired constructor(
 
 	private fun createFamily(): UUID {
 		val familyId = requireNotNull(familyRepository.save(Family(name = "우리집")).familyId)
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER))
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = memberId, role = FamilyRole.MEMBER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = ownerId, role = FamilyRole.OWNER, nickname = "엄마"))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = memberId, role = FamilyRole.MEMBER, nickname = "아빠"))
 		return familyId
 	}
 
@@ -67,6 +67,40 @@ class FamilyMemberControllerTest @Autowired constructor(
 		header("Authorization", "Bearer ${accessToken(accountId)}")
 	}
 
+	private fun updateMyNickname(familyId: UUID, nickname: String, accountId: UUID = memberId) =
+		mockMvc.patch("/api/v1/family/$familyId/member/me") {
+			header("Authorization", "Bearer ${accessToken(accountId)}")
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"nickname":"$nickname"}"""
+		}
+
+	@Test
+	fun `내 닉네임은 이 가족에서만 바뀐다`() {
+		val familyId = createFamily()
+		val otherFamilyId = requireNotNull(familyRepository.save(Family(name = "본가")).familyId)
+		familyMemberRepository.save(FamilyMember(familyId = otherFamilyId, accountId = memberId, role = FamilyRole.OWNER, nickname = "막내아들"))
+
+		updateMyNickname(familyId, "여보").andExpect {
+			status { isOk() }
+			jsonPath("\$.data.accountId") { value(memberId.toString()) }
+			jsonPath("\$.data.nickname") { value("여보") }
+		}
+
+		assertEquals("여보", familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, memberId)?.nickname)
+		assertEquals("엄마", familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, ownerId)?.nickname)
+		assertEquals("막내아들", familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(otherFamilyId, memberId)?.nickname)
+	}
+
+	@Test
+	fun `비어 있거나 20자를 넘는 닉네임은 400, 구성원이 아니면 404`() {
+		val familyId = createFamily()
+
+		updateMyNickname(familyId, " ").andExpect { status { isBadRequest() } }
+		updateMyNickname(familyId, "a".repeat(21)).andExpect { status { isBadRequest() } }
+		updateMyNickname(familyId, "이웃", accountId = UUID.randomUUID()).andExpect { status { isNotFound() } }
+		assertEquals("아빠", familyMemberRepository.findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId, memberId)?.nickname)
+	}
+
 	@Test
 	fun `구성원은 가입 순서대로 구성원 목록을 조회한다`() {
 		val familyId = createFamily()
@@ -76,6 +110,8 @@ class FamilyMemberControllerTest @Autowired constructor(
 			jsonPath("\$.data.length()") { value(2) }
 			jsonPath("\$.data[0].accountId") { value(ownerId.toString()) }
 			jsonPath("\$.data[0].role") { value("OWNER") }
+			jsonPath("\$.data[0].nickname") { value("엄마") }
+			jsonPath("\$.data[1].nickname") { value("아빠") }
 			jsonPath("\$.data[0].familyMemberId") { exists() }
 			jsonPath("\$.data[0].joinedAt") { exists() }
 			jsonPath("\$.data[1].accountId") { value(memberId.toString()) }
@@ -141,7 +177,7 @@ class FamilyMemberControllerTest @Autowired constructor(
 		val familyId = createFamily()
 		val otherFamilyId = requireNotNull(familyRepository.save(Family(name = "옆집")).familyId)
 		val otherMember = familyMemberRepository.save(
-			FamilyMember(familyId = otherFamilyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER),
+			FamilyMember(familyId = otherFamilyId, accountId = UUID.randomUUID(), role = FamilyRole.MEMBER, nickname = "구성원"),
 		)
 
 		updateRole(familyId, requireNotNull(otherMember.familyMemberId), "MANAGER").andExpect { status { isNotFound() } }
@@ -191,7 +227,7 @@ class FamilyMemberControllerTest @Autowired constructor(
 	fun `OWNER만 내보낼 수 있고 OWNER는 내보낼 수 없다`() {
 		val familyId = createFamily()
 		val managerId = UUID.randomUUID()
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = managerId, role = FamilyRole.MANAGER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = managerId, role = FamilyRole.MANAGER, nickname = "구성원"))
 
 		remove(familyId, memberIdOf(familyId, memberId), accountId = managerId).andExpect { status { isForbidden() } }
 		remove(familyId, memberIdOf(familyId, ownerId)).andExpect { status { isBadRequest() } }
@@ -204,7 +240,7 @@ class FamilyMemberControllerTest @Autowired constructor(
 		val familyId = createFamily()
 		val otherFamilyId = requireNotNull(familyRepository.save(Family(name = "옆집")).familyId)
 		val neighbor = UUID.randomUUID()
-		val otherMember = familyMemberRepository.save(FamilyMember(familyId = otherFamilyId, accountId = neighbor, role = FamilyRole.MEMBER))
+		val otherMember = familyMemberRepository.save(FamilyMember(familyId = otherFamilyId, accountId = neighbor, role = FamilyRole.MEMBER, nickname = "구성원"))
 
 		remove(familyId, requireNotNull(otherMember.familyMemberId)).andExpect { status { isNotFound() } }
 		transferOwnership(familyId, requireNotNull(otherMember.familyMemberId)).andExpect { status { isNotFound() } }
@@ -238,7 +274,7 @@ class FamilyMemberControllerTest @Autowired constructor(
 	fun `소유권 넘기기가 동시에 두 번 오면 먼저 처리된 것만 반영된다`() {
 		val familyId = createFamily()
 		val otherId = UUID.randomUUID()
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = otherId, role = FamilyRole.MEMBER))
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = otherId, role = FamilyRole.MEMBER, nickname = "구성원"))
 		val targets = listOf(memberIdOf(familyId, memberId), memberIdOf(familyId, otherId))
 		val start = CountDownLatch(1)
 		val executor = Executors.newFixedThreadPool(targets.size)

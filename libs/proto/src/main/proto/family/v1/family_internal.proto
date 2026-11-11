@@ -18,6 +18,9 @@ service FamilyInternalService {
 
   // 계정이 지금 속한 가족들. 없으면 빈 목록으로 응답한다.
   rpc GetFamilyIds(GetFamilyIdsRequest) returns (GetFamilyIdsResponse);
+
+  // 그 가족에서 쓰는 닉네임. 나간 구성원도 마지막 닉네임으로 담고, 구성원이었던 적 없는 계정은 빠진다.
+  rpc GetNicknames(GetNicknamesRequest) returns (GetNicknamesResponse);
 }
 
 message GetMemberRoleRequest {
@@ -54,6 +57,16 @@ message GetFamilyIdsRequest {
 
 message GetFamilyIdsResponse {
   repeated string family_ids = 1;
+}
+
+message GetNicknamesRequest {
+  string family_id = 1;
+  repeated string account_ids = 2;
+}
+
+message GetNicknamesResponse {
+  // key 는 account_id
+  map<string, string> nicknames = 1;
 }
 
 message FamilyMember {

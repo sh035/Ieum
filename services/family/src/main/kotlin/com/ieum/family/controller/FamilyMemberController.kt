@@ -1,8 +1,10 @@
 package com.ieum.family.controller
 
+import com.ieum.family.controller.dto.request.UpdateFamilyMemberNicknameRequest
 import com.ieum.family.controller.dto.request.UpdateFamilyMemberRoleRequest
 import com.ieum.family.service.FamilyMemberService
 import com.ieum.web.response.BaseResponseEntity
+import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -27,6 +29,15 @@ class FamilyMemberController(
 		@PathVariable familyId: UUID,
 	): BaseResponseEntity {
 		return BaseResponseEntity.single(familyMemberService.getMembers(requireNotNull(jwt.subject), familyId))
+	}
+
+	@PatchMapping("/me")
+	fun updateMyNickname(
+		@AuthenticationPrincipal jwt: Jwt,
+		@PathVariable familyId: UUID,
+		@Valid @RequestBody request: UpdateFamilyMemberNicknameRequest,
+	): BaseResponseEntity {
+		return BaseResponseEntity.single(familyMemberService.updateMyNickname(requireNotNull(jwt.subject), familyId, request))
 	}
 
 	@PatchMapping("/{familyMemberId}/role")

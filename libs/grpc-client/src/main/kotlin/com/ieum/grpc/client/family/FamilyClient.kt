@@ -22,6 +22,9 @@ interface FamilyClient {
 
 	// 계정이 지금 속한 가족들이다.
 	fun getFamilyIds(accountId: UUID): List<UUID>
+
+	// 그 가족에서 쓰는 닉네임이다. 나간 구성원은 마지막 닉네임이고, 구성원이었던 적 없는 계정은 빠진다.
+	fun getNicknames(familyId: UUID, accountIds: Collection<UUID>): Map<UUID, String>
 }
 
 // 구성원이 아니면 서비스가 정한 오류로 막는다.

@@ -70,8 +70,8 @@ class FamilyOutboxTest @Autowired constructor(
 
 	private fun createFamily(vararg members: UUID): UUID {
 		val familyId = requireNotNull(familyRepository.save(Family(name = "우리집")).familyId)
-		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = owner, role = FamilyRole.OWNER))
-		members.forEach { familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = it, role = FamilyRole.MEMBER)) }
+		familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = owner, role = FamilyRole.OWNER, nickname = "구성원"))
+		members.forEach { familyMemberRepository.save(FamilyMember(familyId = familyId, accountId = it, role = FamilyRole.MEMBER, nickname = "구성원")) }
 		return familyId
 	}
 

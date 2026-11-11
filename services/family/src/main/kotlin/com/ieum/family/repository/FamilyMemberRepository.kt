@@ -12,6 +12,8 @@ interface FamilyMemberRepository : JpaRepository<FamilyMember, UUID> {
 
 	fun findAllByFamilyIdAndAccountIdInAndIsDeletedFalse(familyId: UUID, accountIds: Collection<UUID>): List<FamilyMember>
 
+	fun findAllByFamilyIdAndAccountIdIn(familyId: UUID, accountIds: Collection<UUID>): List<FamilyMember>
+
 	fun findByFamilyIdAndAccountIdAndIsDeletedFalse(familyId: UUID, accountId: UUID): FamilyMember?
 
 	fun findByFamilyMemberIdAndFamilyIdAndIsDeletedFalse(familyMemberId: UUID, familyId: UUID): FamilyMember?

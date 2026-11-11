@@ -32,6 +32,7 @@ class FamilyInvitationService(
 	private val familyInvitationRepository: FamilyInvitationRepository,
 	private val accountClient: AccountClient,
 	private val notificationEventPublisher: NotificationEventPublisher,
+	private val familyMemberService: FamilyMemberService,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
@@ -122,7 +123,9 @@ class FamilyInvitationService(
 			return emptyList()
 		}
 		val families = familyRepository.findAllByFamilyIdInAndIsDeletedFalse(invitations.map { it.familyId }).associateBy { requireNotNull(it.familyId) }
-		val nicknames = accountClient.getNicknames(invitations.map { it.inviterAccountId }.toSet())
+		val nicknames = invitations.groupBy { it.familyId }.flatMap { (familyId, sent) ->
+			familyMemberService.getNicknames(familyId, sent.map { it.inviterAccountId }).map { (accountId, nickname) -> (familyId to accountId) to nickname }
+		}.toMap()
 
 		return invitations.mapNotNull { invitation ->
 			families[invitation.familyId]?.let { family ->
@@ -131,7 +134,7 @@ class FamilyInvitationService(
 					familyId = invitation.familyId,
 					familyName = family.name,
 					inviterAccountId = invitation.inviterAccountId,
-					inviterNickname = nicknames[invitation.inviterAccountId],
+					inviterNickname = nicknames[invitation.familyId to invitation.inviterAccountId],
 					expiresAt = invitation.expiresAt,
 				)
 			}
@@ -142,6 +145,8 @@ class FamilyInvitationService(
 	fun acceptInvitation(accountId: String, familyInvitationId: UUID): FamilyResponse {
 		val me = UUID.fromString(accountId)
 		val familyId = findReceivedInvitation(me, familyInvitationId).familyId
+		// account 가 느려도 같은 가족의 다른 요청이 기다리지 않게 잠그기 전에 닉네임을 가져온다.
+		val nickname = accountClient.accountNickname(me)
 		// 혼자 남은 OWNER 가 동시에 나가 가족이 삭제되면 여기서 걸러낸다.
 		val family = familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(familyId)
 			?: throw IeumException(FamilyErrorCode.INVITATION_NOT_FOUND)
@@ -154,7 +159,7 @@ class FamilyInvitationService(
 
 		// 동시 수락은 exists 확인을 함께 통과하므로 unique index 위반으로 걸러낸다. 트랜잭션 안이라 바로 flush 해야 여기서 잡힌다.
 		try {
-			familyMemberRepository.saveAndFlush(FamilyMember(familyId = familyId, accountId = me, role = FamilyRole.MEMBER))
+			familyMemberRepository.saveAndFlush(FamilyMember(familyId = familyId, accountId = me, role = FamilyRole.MEMBER, nickname = nickname))
 		} catch (e: DataIntegrityViolationException) {
 			throw IeumException(FamilyErrorCode.ALREADY_FAMILY_MEMBER)
 		}
