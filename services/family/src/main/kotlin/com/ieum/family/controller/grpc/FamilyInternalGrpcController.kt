@@ -4,7 +4,11 @@ import com.ieum.family.domain.enums.FamilyRole
 import com.ieum.family.service.FamilyMemberService
 import com.ieum.family.service.FamilyService
 import com.ieum.grpc.server.toUuid
+import com.ieum.family.controller.dto.response.FamilySummaryResponse
+import com.ieum.family.controller.dto.response.WithdrawalCheckResponse
+import com.ieum.proto.family.v1.CheckWithdrawalRequest
 import com.ieum.proto.family.v1.FamilyInternalServiceGrpc
+import com.ieum.proto.family.v1.FamilySummary
 import com.ieum.proto.family.v1.GetFamilyIdsRequest
 import com.ieum.proto.family.v1.GetFamilyIdsResponse
 import com.ieum.proto.family.v1.GetFamilyRequest
@@ -13,6 +17,9 @@ import com.ieum.proto.family.v1.GetMemberRoleRequest
 import com.ieum.proto.family.v1.GetMemberRoleResponse
 import com.ieum.proto.family.v1.GetMemberRolesRequest
 import com.ieum.proto.family.v1.GetMemberRolesResponse
+import com.ieum.proto.family.v1.LeaveAllFamiliesRequest
+import com.ieum.proto.family.v1.LeaveAllFamiliesResponse
+import com.ieum.proto.family.v1.WithdrawalCheck
 import com.ieum.proto.family.v1.GetMemberNicknamesRequest
 import com.ieum.proto.family.v1.GetMemberNicknamesResponse
 import io.grpc.stub.StreamObserver
@@ -81,6 +88,27 @@ class FamilyInternalGrpcController(
 		)
 		responseObserver.onCompleted()
 	}
+
+	override fun checkWithdrawal(request: CheckWithdrawalRequest, responseObserver: StreamObserver<WithdrawalCheck>) {
+		responseObserver.onNext(familyService.checkWithdrawal(request.accountId.toUuid()).toProto())
+		responseObserver.onCompleted()
+	}
+
+	override fun leaveAllFamilies(request: LeaveAllFamiliesRequest, responseObserver: StreamObserver<LeaveAllFamiliesResponse>) {
+		val result = familyService.leaveAllFamilies(request.accountId.toUuid(), request.deleteSoloFamilies)
+
+		responseObserver.onNext(LeaveAllFamiliesResponse.newBuilder().setLeft(result.left).setCheck(result.check.toProto()).build())
+		responseObserver.onCompleted()
+	}
+
+	private fun WithdrawalCheckResponse.toProto(): WithdrawalCheck =
+		WithdrawalCheck.newBuilder()
+			.addAllTransferRequiredFamilies(transferRequiredFamilies.map { it.toProto() })
+			.addAllSoloFamilies(soloFamilies.map { it.toProto() })
+			.build()
+
+	private fun FamilySummaryResponse.toProto(): FamilySummary =
+		FamilySummary.newBuilder().setFamilyId(familyId.toString()).setName(name).build()
 
 	private fun FamilyRole.toProto() = ProtoFamilyRole.valueOf("FAMILY_ROLE_$name")
 }
