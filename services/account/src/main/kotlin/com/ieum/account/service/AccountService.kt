@@ -62,17 +62,36 @@ class AccountService(
 		refreshTokenRepository.revoke(refreshToken)
 	}
 
-	fun getAccount(accountId: String): AccountResponse {
-		val account = accountRepository.findById(UUID.fromString(accountId))
+	fun getAccount(accountId: String): AccountResponse = findActive(accountId).toResponse()
+
+	fun updateNickname(accountId: String, nickname: String): AccountResponse {
+		val account = findActive(accountId)
+		account.nickname = nickname
+
+		return accountRepository.save(account).toResponse()
+	}
+
+	// 비밀번호를 바꾸면 모든 기기의 refresh token 을 끊고 지금 기기에만 새로 발급한다.
+	fun updatePassword(accountId: String, currentPassword: String, newPassword: String): TokenResponse {
+		val account = findActive(accountId)
+		if (!passwordEncoder.matches(currentPassword, account.password)) {
+			throw IeumException(AccountErrorCode.WRONG_CURRENT_PASSWORD)
+		}
+
+		account.password = requireNotNull(passwordEncoder.encode(newPassword))
+		accountRepository.save(account)
+		refreshTokenRepository.revokeAll(accountId)
+		log.debug("Password changed. accountId={}", accountId)
+
+		return issueTokens(accountId)
+	}
+
+	private fun findActive(accountId: String): Account =
+		accountRepository.findById(UUID.fromString(accountId))
 			.filter { !it.isDeleted }
 			.orElseThrow { IeumException(AccountErrorCode.ACCOUNT_NOT_FOUND) }
 
-		return AccountResponse(
-			email = account.email,
-			nickname = account.nickname,
-			birthDate = account.birthDate,
-		)
-	}
+	private fun Account.toResponse() = AccountResponse(email = email, nickname = nickname, birthDate = birthDate)
 
 	// 없거나 탈퇴한 계정이면 ACCOUNT_NOT_FOUND 다.
 	fun findProfileByEmail(email: String): AccountProfileResponse {

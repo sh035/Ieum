@@ -11,4 +11,5 @@ enum class AccountErrorCode(
 	INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Invalid credentials."),
 	ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "Account not found."),
 	DUPLICATE_EMAIL(HttpStatus.CONFLICT, "Email already exists."),
+	WRONG_CURRENT_PASSWORD(HttpStatus.BAD_REQUEST, "Current password is incorrect."),
 }
