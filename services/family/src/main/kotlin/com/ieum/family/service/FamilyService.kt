@@ -9,6 +9,9 @@ import com.ieum.events.NotificationTargetType
 import com.ieum.family.controller.dto.response.CreateFamilyResponse
 import com.ieum.family.controller.dto.response.FamilyInfoResponse
 import com.ieum.family.controller.dto.response.FamilyResponse
+import com.ieum.family.controller.dto.response.FamilySummaryResponse
+import com.ieum.family.controller.dto.response.LeaveAllFamiliesResponse
+import com.ieum.family.controller.dto.response.WithdrawalCheckResponse
 import com.ieum.family.domain.entity.Family
 import com.ieum.family.domain.entity.FamilyMember
 import com.ieum.family.domain.enums.FamilyRole
@@ -100,6 +103,48 @@ class FamilyService(
 				actorAccountId = me,
 			),
 		)
+	}
+
+	// 탈퇴 전 확인이다. 서비스 간 호출용이라 요청자 권한은 보지 않는다.
+	@Transactional(readOnly = true)
+	fun checkWithdrawal(accountId: UUID): WithdrawalCheckResponse = withdrawalCheck(accountId)
+
+	// 탈퇴하는 계정을 모든 가족에서 내보낸다. 확인과 나가기 사이에 누가 들어오거나 나가지 않게 내 가족을 모두 잠근 뒤 다시 확인한다.
+	@Transactional
+	fun leaveAllFamilies(accountId: UUID, deleteSoloFamilies: Boolean): LeaveAllFamiliesResponse {
+		// 여러 가족을 잠그므로 순서를 맞춰 다른 탈퇴와 교착되지 않게 한다.
+		val lockedFamilyIds = familyMemberRepository.findFamilyIdsByAccountId(accountId)
+			.sorted()
+			.mapNotNull { familyRepository.findWithLockByFamilyIdAndIsDeletedFalse(it)?.familyId }
+
+		val check = withdrawalCheck(accountId)
+		if (check.transferRequiredFamilies.isNotEmpty() || (check.soloFamilies.isNotEmpty() && !deleteSoloFamilies)) {
+			return LeaveAllFamiliesResponse(left = false, check = check)
+		}
+
+		lockedFamilyIds.forEach { leave(accountId.toString(), it) }
+		familyInvitationRepository.findAllByInviteeAccountIdAndIsDeletedFalseOrderByCreatedAt(accountId).forEach { it.delete() }
+		log.debug("Left all families for withdrawal. accountId={}", accountId)
+
+		return LeaveAllFamiliesResponse(left = true, check = check)
+	}
+
+	private fun withdrawalCheck(accountId: UUID): WithdrawalCheckResponse {
+		val members = familyMemberRepository.findAllByAccountIdAndIsDeletedFalseOrderByCreatedAt(accountId)
+		val families = familyRepository.findAllByFamilyIdInAndIsDeletedFalse(members.map { it.familyId }).associateBy { requireNotNull(it.familyId) }
+		val transferRequired = mutableListOf<FamilySummaryResponse>()
+		val solo = mutableListOf<FamilySummaryResponse>()
+
+		members.forEach { member ->
+			val family = families[member.familyId] ?: return@forEach
+			val summary = FamilySummaryResponse(familyId = member.familyId, name = family.name)
+			when {
+				familyMemberRepository.countByFamilyIdAndIsDeletedFalse(member.familyId) == 1L -> solo += summary
+				member.role == FamilyRole.OWNER -> transferRequired += summary
+			}
+		}
+
+		return WithdrawalCheckResponse(transferRequiredFamilies = transferRequired, soloFamilies = solo)
 	}
 
 	// 서비스 간 호출용이라 요청자 권한은 보지 않는다.

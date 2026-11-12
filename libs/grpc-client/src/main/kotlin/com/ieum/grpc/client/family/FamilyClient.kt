@@ -25,6 +25,11 @@ interface FamilyClient {
 
 	// 그 가족에서 쓰는 닉네임이다. 나간 구성원은 마지막 닉네임이고, 구성원이었던 적 없는 계정은 빠진다.
 	fun getNicknames(familyId: UUID, accountIds: Collection<UUID>): Map<UUID, String>
+
+	fun checkWithdrawal(accountId: UUID): WithdrawalCheck
+
+	// 막는 가족이 있거나 혼자인 가족 삭제에 동의하지 않았으면 아무것도 바꾸지 않고 left = false 다.
+	fun leaveAllFamilies(accountId: UUID, deleteSoloFamilies: Boolean): LeaveAllFamiliesResult
 }
 
 // 구성원이 아니면 서비스가 정한 오류로 막는다.

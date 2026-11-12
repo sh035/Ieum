@@ -78,6 +78,8 @@ class BriefingSchedulerTest @Autowired constructor(
 		notificationRepository.deleteAllInBatch()
 		deviceTokenRepository.deleteAllInBatch()
 		releaseLock()
+		// 기기 토큰만 있는 계정은 account 에 있는지 확인한 뒤 빈 브리핑을 받는다.
+		`when`(accountClient.getNicknames(setOf(dad))).thenReturn(mapOf(dad to "아빠"))
 	}
 
 	private fun releaseLock() {
@@ -128,6 +130,18 @@ class BriefingSchedulerTest @Autowired constructor(
 			mapOf(mom to briefing("유통기한 1"), dad to briefing("오늘은 챙길 일이 없어요. 여유로운 하루 보내세요")),
 			briefings(),
 		)
+	}
+
+	@Test
+	fun `탈퇴해서 account 에 없는 계정의 기기 토큰에는 빈 브리핑을 보내지 않는다`() {
+		val withdrawn = UUID.randomUUID()
+		token(dad)
+		token(withdrawn)
+		`when`(accountClient.getNicknames(setOf(dad, withdrawn))).thenReturn(mapOf(dad to "아빠"))
+
+		briefingScheduler.run()
+
+		assertEquals(setOf(dad), briefings().keys)
 	}
 
 	@Test

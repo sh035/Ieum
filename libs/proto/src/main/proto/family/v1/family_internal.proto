@@ -21,6 +21,13 @@ service FamilyInternalService {
 
   // 그 가족에서 쓰는 닉네임. 나간 구성원도 마지막 닉네임으로 담고, 구성원이었던 적 없는 계정은 빠진다.
   rpc GetMemberNicknames(GetMemberNicknamesRequest) returns (GetMemberNicknamesResponse);
+
+  // 탈퇴 전에 확인한다. 소유권을 넘겨야 하는 가족이 있으면 탈퇴할 수 없다.
+  rpc CheckWithdrawal(CheckWithdrawalRequest) returns (WithdrawalCheck);
+
+  // 탈퇴하는 계정을 모든 가족에서 내보낸다. 소유권을 넘겨야 하는 가족이 있거나,
+  // 혼자인 가족이 있는데 delete_solo_families 가 false 면 아무것도 바꾸지 않고 left = false 로 응답한다.
+  rpc LeaveAllFamilies(LeaveAllFamiliesRequest) returns (LeaveAllFamiliesResponse);
 }
 
 message GetMemberRoleRequest {
@@ -67,6 +74,32 @@ message GetMemberNicknamesRequest {
 message GetMemberNicknamesResponse {
   // key 는 account_id
   map<string, string> nicknames = 1;
+}
+
+message CheckWithdrawalRequest {
+  string account_id = 1;
+}
+
+message WithdrawalCheck {
+  // 다른 구성원이 있는데 OWNER 인 가족
+  repeated FamilySummary transfer_required_families = 1;
+  // 혼자인 가족. 탈퇴하면 삭제된다.
+  repeated FamilySummary solo_families = 2;
+}
+
+message FamilySummary {
+  string family_id = 1;
+  string name = 2;
+}
+
+message LeaveAllFamiliesRequest {
+  string account_id = 1;
+  bool delete_solo_families = 2;
+}
+
+message LeaveAllFamiliesResponse {
+  bool left = 1;
+  WithdrawalCheck check = 2;
 }
 
 message FamilyMember {

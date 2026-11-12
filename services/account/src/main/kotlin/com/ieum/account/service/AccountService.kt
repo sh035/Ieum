@@ -2,19 +2,31 @@ package com.ieum.account.service
 
 import com.ieum.account.controller.dto.request.SignUpRequest
 import com.ieum.account.controller.dto.request.UpdateAccountRequest
+import com.ieum.account.controller.dto.request.WithdrawRequest
 import com.ieum.account.controller.dto.response.AccountProfileResponse
 import com.ieum.account.controller.dto.response.AccountResponse
 import com.ieum.account.controller.dto.response.TokenResponse
 import com.ieum.account.controller.dto.response.UpdateAccountResponse
+import com.ieum.account.controller.dto.response.WithdrawalCheckResponse
+import com.ieum.account.controller.dto.response.WithdrawalFamilyResponse
 import com.ieum.account.domain.entity.Account
 import com.ieum.account.exception.AccountErrorCode
 import com.ieum.account.repository.AccountRepository
 import com.ieum.account.repository.RefreshTokenRepository
 import com.ieum.account.util.JwtProvider
+import com.ieum.events.AccountEventData
+import com.ieum.events.AccountEventType
+import com.ieum.grpc.client.family.FamilyClient
+import com.ieum.grpc.client.family.WithdrawalCheck
 import com.ieum.web.exception.IeumException
 import org.slf4j.LoggerFactory
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import java.time.Duration
+import java.time.LocalDateTime
 import java.util.UUID
 
 @Service
@@ -23,6 +35,8 @@ class AccountService(
 	private val refreshTokenRepository: RefreshTokenRepository,
 	private val passwordEncoder: PasswordEncoder,
 	private val jwtProvider: JwtProvider,
+	private val familyClient: FamilyClient,
+	private val accountEventPublisher: AccountEventPublisher,
 ) {
 
 	private val log = LoggerFactory.getLogger(javaClass)
@@ -30,6 +44,10 @@ class AccountService(
 	fun signUp(request: SignUpRequest) {
 		if (accountRepository.existsByEmailAndIsDeletedFalse(request.email)) {
 			throw IeumException(AccountErrorCode.DUPLICATE_EMAIL)
+		}
+		// 탈퇴와 재가입을 반복하지 못하게 같은 이메일은 탈퇴 3일 뒤부터 받는다. 탈퇴한 계정은 더 바뀌지 않아 updatedAt 이 탈퇴 시각이다.
+		if (accountRepository.existsByEmailAndIsDeletedTrueAndUpdatedAtAfter(request.email, LocalDateTime.now().minus(REJOIN_WAIT))) {
+			throw IeumException(AccountErrorCode.REJOIN_TOO_SOON)
 		}
 
 		val account = accountRepository.save(
@@ -53,6 +71,10 @@ class AccountService(
 	fun reissue(refreshToken: String): TokenResponse {
 		val accountId = refreshTokenRepository.findAccountId(refreshToken)
 			?: throw IeumException(AccountErrorCode.INVALID_CREDENTIALS)
+		// 탈퇴와 겹쳐 발급된 토큰이 남아도 탈퇴한 계정에는 새 access token 을 주지 않는다.
+		if (accountRepository.findById(UUID.fromString(accountId)).filter { !it.isDeleted }.isEmpty) {
+			throw IeumException(AccountErrorCode.INVALID_CREDENTIALS)
+		}
 
 		return TokenResponse(
 			accessToken = jwtProvider.createAccessToken(accountId),
@@ -89,6 +111,43 @@ class AccountService(
 		return UpdateAccountResponse(account = saved.toResponse(), token = issueTokens(accountId))
 	}
 
+	fun checkWithdrawal(accountId: String): WithdrawalCheckResponse =
+		familyClient.checkWithdrawal(findActive(accountId).let { requireNotNull(it.accountId) }).toResponse()
+
+	// 모든 가족에서 먼저 나간 뒤 계정을 지운다. 가족 정리가 끝났는데 계정 삭제가 실패하면 다시 탈퇴하면 된다.
+	@Transactional
+	fun withdraw(accountId: String, request: WithdrawRequest) {
+		val account = findActive(accountId)
+		if (!passwordEncoder.matches(request.password, account.password)) {
+			throw IeumException(AccountErrorCode.WRONG_CURRENT_PASSWORD)
+		}
+
+		val result = familyClient.leaveAllFamilies(requireNotNull(account.accountId), request.deleteSoloFamilies)
+		if (!result.left) {
+			throw IeumException(
+				if (result.check.transferRequiredFamilies.isNotEmpty()) {
+					AccountErrorCode.OWNERSHIP_TRANSFER_REQUIRED
+				} else {
+					AccountErrorCode.SOLO_FAMILY_DELETION_NOT_CONFIRMED
+				},
+			)
+		}
+
+		account.delete()
+		accountRepository.save(account)
+		accountEventPublisher.publish(AccountEventType.ACCOUNT_DELETED, AccountEventData(accountId = requireNotNull(account.accountId)))
+		// Redis 오류로 탈퇴가 롤백되지 않게 커밋 뒤에 끊는다. 실패해도 reissue 가 탈퇴한 계정을 막는다.
+		TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+			override fun afterCommit() = refreshTokenRepository.revokeAll(accountId)
+		})
+		log.debug("Account withdrawn. accountId={}", accountId)
+	}
+
+	private fun WithdrawalCheck.toResponse() = WithdrawalCheckResponse(
+		transferRequiredFamilies = transferRequiredFamilies.map { WithdrawalFamilyResponse(familyId = it.familyId, name = it.name) },
+		soloFamilies = soloFamilies.map { WithdrawalFamilyResponse(familyId = it.familyId, name = it.name) },
+	)
+
 	private fun findActive(accountId: String): Account =
 		accountRepository.findById(UUID.fromString(accountId))
 			.filter { !it.isDeleted }
@@ -106,4 +165,8 @@ class AccountService(
 	fun getProfiles(accountIds: List<UUID>): List<AccountProfileResponse> =
 		accountRepository.findAllByAccountIdInAndIsDeletedFalse(accountIds)
 			.map { AccountProfileResponse(accountId = requireNotNull(it.accountId), nickname = it.nickname) }
+
+	companion object {
+		private val REJOIN_WAIT = Duration.ofDays(3)
+	}
 }

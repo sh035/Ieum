@@ -5,6 +5,7 @@ import com.ieum.notification.domain.entity.DeviceToken
 import com.ieum.notification.repository.DeviceTokenRepository
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
 @Service
@@ -28,6 +29,12 @@ class DeviceTokenService(
 		} catch (e: DataIntegrityViolationException) {
 			return
 		}
+	}
+
+	// 탈퇴한 계정의 기기로 푸시가 가지 않게 지운다.
+	@Transactional
+	fun deleteAll(accountId: UUID) {
+		deviceTokenRepository.findAllByAccountIdAndIsDeletedFalse(accountId).forEach { it.delete() }
 	}
 
 	// 로그아웃마다 부르므로 없는 토큰이나 남의 토큰이어도 성공으로 끝낸다.
