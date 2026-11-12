@@ -17,7 +17,9 @@ CREATE TABLE account.account
 	password   varchar(255) NOT NULL,          -- 해시한 비밀번호
 	birth_date date         NOT NULL,          -- 생년월일
 	created_at timestamp(6) NOT NULL,          -- 가입 시각
+	created_by uuid,                           -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at timestamp(6),                   -- 마지막 수정 시각. 탈퇴한 계정은 탈퇴 시각
+	updated_by uuid,                           -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted boolean      NOT NULL DEFAULT false -- 탈퇴 여부
 );
 
@@ -34,7 +36,9 @@ CREATE TABLE family.family
 	family_id  uuid PRIMARY KEY,               -- 가족 ID
 	name       varchar(255) NOT NULL,          -- 가족 이름, 알림 문구의 [가족이름] 에 쓴다
 	created_at timestamp(6) NOT NULL,          -- 만든 시각
+	created_by uuid,                           -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at timestamp(6),                   -- 마지막 수정 시각
+	updated_by uuid,                           -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted boolean      NOT NULL DEFAULT false -- 삭제 여부
 );
 
@@ -49,7 +53,9 @@ CREATE TABLE family.family_member
 	role             varchar(20)  NOT NULL,    -- OWNER / MANAGER(살림 함께 꾸리기) / MEMBER
 	nickname         varchar(20)  NOT NULL,    -- 이 가족에서 부르는 이름. 들어올 때 계정 닉네임을 복사하고 본인이 바꾼다
 	created_at       timestamp(6) NOT NULL,    -- 들어온 시각
+	created_by       uuid,                     -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at       timestamp(6),             -- 마지막 수정 시각 (역할 변경 등)
+	updated_by       uuid,                     -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted       boolean      NOT NULL DEFAULT false -- 나갔거나 내보내졌는지
 );
 
@@ -74,7 +80,9 @@ CREATE TABLE family.family_invitation
 	invitee_account_id   uuid         NOT NULL, -- 초대받은 계정
 	expires_at           timestamp(6) NOT NULL, -- 만료 시각 (만든 시각 + 1시간)
 	created_at           timestamp(6) NOT NULL, -- 만든 시각
+	created_by           uuid,                  -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at           timestamp(6),          -- 마지막 수정 시각
+	updated_by           uuid,                  -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted           boolean      NOT NULL DEFAULT false -- 수락 / 거절 / 취소 / 가족 삭제 / 만료 정리로 끝났는지
 );
 
@@ -144,7 +152,9 @@ CREATE TABLE planner.todo
 	due_time            time,                  -- 마감 시각, 없으면 그날 하루
 	is_completed        boolean      NOT NULL DEFAULT false, -- 완료 여부
 	created_at          timestamp(6) NOT NULL, -- 만든 시각
+	created_by          uuid,                  -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at          timestamp(6),          -- 마지막 수정 시각
+	updated_by          uuid,                  -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted          boolean      NOT NULL DEFAULT false, -- 삭제 여부
 	CONSTRAINT ck_todo_visibility_family_id CHECK (
 		(visibility = 'FAMILY' AND family_id IS NOT NULL) OR (visibility = 'PRIVATE' AND family_id IS NULL)
@@ -163,7 +173,9 @@ CREATE TABLE planner.todo_checklist_item
 	content                varchar(255) NOT NULL, -- 항목 내용
 	is_completed           boolean      NOT NULL DEFAULT false, -- 체크 여부
 	created_at             timestamp(6) NOT NULL, -- 만든 시각
+	created_by             uuid,                  -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at             timestamp(6),          -- 마지막 수정 시각
+	updated_by             uuid,                  -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted             boolean      NOT NULL DEFAULT false -- 삭제 여부
 );
 
@@ -185,7 +197,9 @@ CREATE TABLE planner.schedule
 	start_at           timestamp(6) NOT NULL,  -- 시작 (종일이면 시작 날짜 00:00)
 	end_at             timestamp(6) NOT NULL,  -- 끝 (종일이면 끝 날짜 00:00)
 	created_at         timestamp(6) NOT NULL,  -- 만든 시각
+	created_by         uuid,                   -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at         timestamp(6),           -- 마지막 수정 시각
+	updated_by         uuid,                   -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted         boolean      NOT NULL DEFAULT false, -- 삭제 여부
 	CONSTRAINT ck_schedule_visibility_family_id CHECK (
 		(visibility = 'FAMILY' AND family_id IS NOT NULL) OR (visibility = 'PRIVATE' AND family_id IS NULL)
@@ -204,7 +218,9 @@ CREATE TABLE planner.schedule_attendee
 	schedule_id          uuid         NOT NULL REFERENCES planner.schedule (schedule_id), -- 일정
 	account_id           uuid         NOT NULL, -- 참석하는 계정
 	created_at           timestamp(6) NOT NULL, -- 추가된 시각
+	created_by           uuid,                  -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at           timestamp(6),          -- 마지막 수정 시각
+	updated_by           uuid,                  -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted           boolean      NOT NULL DEFAULT false -- 참석자에서 빠졌는지
 );
 
@@ -239,7 +255,9 @@ CREATE TABLE grocery.storage
 	family_id  uuid         NOT NULL,          -- 가족
 	name       varchar(50)  NOT NULL,          -- 장소 이름
 	created_at timestamp(6) NOT NULL,          -- 만든 시각
+	created_by uuid,                           -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at timestamp(6),                   -- 마지막 수정 시각
+	updated_by uuid,                           -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted boolean      NOT NULL DEFAULT false -- 삭제 여부
 );
 
@@ -264,7 +282,9 @@ CREATE TABLE grocery.grocery_item
 	purchase_date      date,                   -- 산 날짜
 	expiry_date        date,                   -- 유통기한, 하루 전부터 브리핑에 들어간다
 	created_at         timestamp(6) NOT NULL,  -- 등록한 시각
+	created_by         uuid,                   -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at         timestamp(6),           -- 마지막 수정 시각
+	updated_by         uuid,                   -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted         boolean      NOT NULL DEFAULT false -- 삭제 여부
 );
 
@@ -282,7 +302,9 @@ CREATE TABLE grocery.receipt_item_mapping
 	category                varchar(30)  NOT NULL, -- 가족이 확정한 카테고리
 	storage_id              uuid         NOT NULL REFERENCES grocery.storage (storage_id), -- 가족이 확정한 보관 장소
 	created_at              timestamp(6) NOT NULL, -- 만든 시각
+	created_by              uuid,                  -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at              timestamp(6),          -- 마지막 수정 시각
+	updated_by              uuid,                  -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted              boolean      NOT NULL DEFAULT false -- 삭제 여부
 );
 
@@ -305,7 +327,9 @@ CREATE TABLE expense.expense
 	visibility         varchar(20)  NOT NULL,  -- FAMILY / PRIVATE
 	spent_date         date         NOT NULL,  -- 쓴 날짜
 	created_at         timestamp(6) NOT NULL,  -- 기록한 시각
+	created_by         uuid,                   -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at         timestamp(6),           -- 마지막 수정 시각
+	updated_by         uuid,                   -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted         boolean      NOT NULL DEFAULT false -- 삭제 여부
 );
 
@@ -322,7 +346,9 @@ CREATE TABLE expense.budget
 	budget_month date,                         -- 적용 달 (1일), 없으면 매달 기본 예산
 	amount       integer      NOT NULL CHECK (amount >= 0), -- 예산 금액 (원)
 	created_at   timestamp(6) NOT NULL,        -- 만든 시각
+	created_by   uuid,                         -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at   timestamp(6),                 -- 마지막 수정 시각
+	updated_by   uuid,                         -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted   boolean      NOT NULL DEFAULT false, -- 삭제 여부
 	CONSTRAINT ck_budget_month_first_day CHECK (budget_month IS NULL OR extract(DAY FROM budget_month) = 1)
 );
@@ -347,7 +373,9 @@ CREATE TABLE notification.notification
 	dedup_key       varchar(200) NOT NULL,     -- 같은 알림이 두 번 저장되지 않게 막는 키 (이벤트 ID 또는 발행 쪽이 정한 키)
 	is_read         boolean      NOT NULL DEFAULT false, -- 읽음 여부
 	created_at      timestamp(6) NOT NULL,     -- 받은 시각
+	created_by      uuid,                      -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at      timestamp(6),              -- 마지막 수정 시각
+	updated_by      uuid,                      -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted      boolean      NOT NULL DEFAULT false -- 지웠는지
 );
 
@@ -365,7 +393,9 @@ CREATE TABLE notification.device_token
 	token           varchar(500) NOT NULL,     -- FCM 등록 토큰
 	platform        varchar(20)  NOT NULL,     -- ANDROID / IOS
 	created_at      timestamp(6) NOT NULL,     -- 등록한 시각
+	created_by      uuid,                      -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at      timestamp(6),              -- 마지막 수정 시각
+	updated_by      uuid,                      -- 마지막으로 고친 계정, 시스템이면 없다
 	is_deleted      boolean      NOT NULL DEFAULT false -- 해제됐거나 만료됐는지
 );
 

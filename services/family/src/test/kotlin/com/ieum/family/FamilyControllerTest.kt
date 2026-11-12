@@ -18,6 +18,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.patch
 import org.springframework.test.web.servlet.post
 import tools.jackson.databind.ObjectMapper
 import java.time.LocalDateTime
@@ -85,6 +86,37 @@ class FamilyControllerTest @Autowired constructor(
 		createFamily("우리집").andExpect { status { isServiceUnavailable() } }
 
 		assertEquals(0, familyRepository.count())
+	}
+
+	@Test
+	fun `만든 사람과 고친 사람을 요청 토큰의 계정으로 남기고 만들 때는 고친 사람을 비운다`() {
+		createFamily("우리집").andExpect { status { isCreated() } }
+		val family = familyRepository.findAll().single()
+		val member = familyMemberRepository.findAll().single()
+		assertEquals(accountId, family.createdBy)
+		assertNull(family.updatedBy)
+		assertEquals(accountId, member.createdBy)
+		assertNull(member.updatedBy)
+
+		mockMvc.patch("/api/v1/family/${family.familyId}/member/me") {
+			header("Authorization", "Bearer ${accessToken(accountId)}")
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"nickname":"아빠"}"""
+		}.andExpect { status { isOk() } }
+
+		val updated = familyMemberRepository.findAll().single()
+		assertEquals(accountId, updated.createdBy)
+		assertEquals(accountId, updated.updatedBy)
+
+		// 이벤트 처리나 스케줄러처럼 요청 밖에서 고치면 마지막 수정자는 시스템이다.
+		updated.nickname = "가장"
+		assertNull(familyMemberRepository.save(updated).updatedBy)
+		assertEquals(accountId, familyMemberRepository.findAll().single().createdBy)
+	}
+
+	@Test
+	fun `요청한 사람이 없는 저장은 만든 사람도 시스템이다`() {
+		assertNull(familyRepository.save(Family(name = "우리집")).createdBy)
 	}
 
 	@Test

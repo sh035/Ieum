@@ -205,6 +205,7 @@ class NotificationControllerTest @Autowired constructor(
 
 		unreadCount("PERSONAL").andExpect { jsonPath("\$.data.count") { value(0) } }
 		unreadCount("FAMILY", familyId).andExpect { jsonPath("\$.data.count") { value(1) } }
+		assertEquals(me, notificationRepository.findAll().single { it.familyId == null }.updatedBy)
 	}
 
 	@Test
