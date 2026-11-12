@@ -2,6 +2,7 @@ package com.ieum.planner.controller
 
 import com.ieum.planner.controller.dto.request.CreateScheduleRequest
 import com.ieum.planner.controller.dto.request.UpdateScheduleRequest
+import com.ieum.planner.domain.enums.RecurrenceScope
 import com.ieum.planner.service.ScheduleService
 import com.ieum.web.response.BaseResponseEntity
 import jakarta.validation.Valid
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 
 @RestController
@@ -43,29 +45,37 @@ class ScheduleController(
 		return BaseResponseEntity.single(scheduleService.getSchedules(requireNotNull(jwt.subject), familyId, from, to))
 	}
 
+	// 반복 일정은 회차를 함께 보낸다. 없으면 첫 회차다.
 	@GetMapping("/{scheduleId}")
 	fun getSchedule(
 		@AuthenticationPrincipal jwt: Jwt,
 		@PathVariable scheduleId: UUID,
+		@RequestParam(required = false) occurrenceStartAt: LocalDateTime?,
 	): BaseResponseEntity {
-		return BaseResponseEntity.single(scheduleService.getSchedule(requireNotNull(jwt.subject), scheduleId))
+		return BaseResponseEntity.single(scheduleService.getSchedule(requireNotNull(jwt.subject), scheduleId, occurrenceStartAt))
 	}
 
 	@PatchMapping("/{scheduleId}")
 	fun updateSchedule(
 		@AuthenticationPrincipal jwt: Jwt,
 		@PathVariable scheduleId: UUID,
+		@RequestParam(required = false) occurrenceStartAt: LocalDateTime?,
+		@RequestParam(required = false) scope: RecurrenceScope?,
 		@Valid @RequestBody request: UpdateScheduleRequest,
 	): BaseResponseEntity {
-		return BaseResponseEntity.single(scheduleService.updateSchedule(requireNotNull(jwt.subject), scheduleId, request))
+		return BaseResponseEntity.single(
+			scheduleService.updateSchedule(requireNotNull(jwt.subject), scheduleId, request, occurrenceStartAt, scope),
+		)
 	}
 
 	@DeleteMapping("/{scheduleId}")
 	fun deleteSchedule(
 		@AuthenticationPrincipal jwt: Jwt,
 		@PathVariable scheduleId: UUID,
+		@RequestParam(required = false) occurrenceStartAt: LocalDateTime?,
+		@RequestParam(required = false) scope: RecurrenceScope?,
 	): BaseResponseEntity {
-		scheduleService.deleteSchedule(requireNotNull(jwt.subject), scheduleId)
+		scheduleService.deleteSchedule(requireNotNull(jwt.subject), scheduleId, occurrenceStartAt, scope)
 		return BaseResponseEntity.emptyNoContent()
 	}
 }

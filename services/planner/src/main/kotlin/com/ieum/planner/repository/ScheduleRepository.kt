@@ -38,6 +38,35 @@ interface ScheduleRepository : JpaRepository<Schedule, UUID> {
 		rangeStart: LocalDateTime,
 	): List<Schedule>
 
+	// 반복 원본 후보다. 첫 회차가 기간보다 앞서도 회차가 걸칠 수 있어 시작만 본다. 종료일은 펼칠 때 거른다.
+	fun findAllByFamilyIdAndRepeatTypeIsNotNullAndStartAtLessThanAndIsDeletedFalse(familyId: UUID, rangeEnd: LocalDateTime): List<Schedule>
+
+	fun findAllByCreatorAccountIdAndVisibilityAndRepeatTypeIsNotNullAndStartAtLessThanAndIsDeletedFalse(
+		creatorAccountId: UUID,
+		visibility: Visibility,
+		rangeEnd: LocalDateTime,
+	): List<Schedule>
+
+	fun findAllByRepeatTypeIsNotNullAndStartAtLessThanAndIsDeletedFalse(rangeEnd: LocalDateTime): List<Schedule>
+
+	@Query(
+		"""
+		select s from Schedule s
+		where s.repeatType is not null and s.startAt < :rangeEnd and s.isDeleted = false
+			and s.scheduleId in (
+				select a.scheduleId from ScheduleAttendee a where a.accountId = :accountId and a.isDeleted = false
+			)
+		""",
+	)
+	fun findAttendingRecurringSchedulesAndIsDeletedFalse(accountId: UUID, rangeEnd: LocalDateTime): List<Schedule>
+
+	// 취소한 회차도 건너뛰어야 해서 삭제 상태까지 본다.
+	fun findAllByRecurringScheduleIdIn(recurringScheduleIds: Collection<UUID>): List<Schedule>
+
+	fun findByRecurringScheduleIdAndOriginalStartAt(recurringScheduleId: UUID, originalStartAt: LocalDateTime): Schedule?
+
+	fun findAllByRecurringScheduleIdAndIsDeletedFalse(recurringScheduleId: UUID): List<Schedule>
+
 	@Query(
 		"""
 		select s from Schedule s
