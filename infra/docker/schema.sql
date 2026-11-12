@@ -185,6 +185,7 @@ CREATE INDEX idx_todo_checklist_item_todo_id ON planner.todo_checklist_item (tod
 -- - PRIVATE 일정은 가족에 속하지 않는다 (family_id 없음)
 -- - 종일 일정은 start_at / end_at 의 날짜만 쓰고 끝 날짜를 포함한다
 -- - 시각 일정은 끝 시각을 포함하지 않는다 (자정에 끝나면 전날 일정)
+-- - 반복 일정은 원본 한 행에 규칙만 두고 조회 기간만 펼친다. 회차를 따로 바꾸면 그 회차를 대신하는 행을 만든다
 CREATE TABLE planner.schedule
 (
 	schedule_id        uuid PRIMARY KEY,       -- 일정 ID
@@ -196,6 +197,10 @@ CREATE TABLE planner.schedule
 	is_all_day         boolean      NOT NULL,  -- 종일 일정 여부
 	start_at           timestamp(6) NOT NULL,  -- 시작 (종일이면 시작 날짜 00:00)
 	end_at             timestamp(6) NOT NULL,  -- 끝 (종일이면 끝 날짜 00:00)
+	repeat_type        varchar(20),            -- 반복 원본이면 DAILY / WEEKLY / MONTHLY. start_at / end_at 이 첫 회차
+	repeat_until       date,                   -- 반복 원본의 마지막 회차 날짜, 없으면 끝없이 반복
+	recurring_schedule_id uuid REFERENCES planner.schedule (schedule_id), -- 반복의 한 회차를 대신하는 행이면 그 원본
+	original_start_at  timestamp(6),           -- 대신하는 회차의 원래 시작. 삭제 상태면 그 회차를 건너뛴다
 	created_at         timestamp(6) NOT NULL,  -- 만든 시각
 	created_by         uuid,                   -- 만든 계정, 요청한 사람이 없으면(시스템) 없다
 	updated_at         timestamp(6),           -- 마지막 수정 시각
@@ -204,8 +209,18 @@ CREATE TABLE planner.schedule
 	CONSTRAINT ck_schedule_visibility_family_id CHECK (
 		(visibility = 'FAMILY' AND family_id IS NOT NULL) OR (visibility = 'PRIVATE' AND family_id IS NULL)
 	),
-	CONSTRAINT ck_schedule_period CHECK (start_at <= end_at)
+	CONSTRAINT ck_schedule_period CHECK (start_at <= end_at),
+	CONSTRAINT ck_schedule_recurrence CHECK (
+		(recurring_schedule_id IS NULL AND original_start_at IS NULL)
+			OR (recurring_schedule_id IS NOT NULL AND original_start_at IS NOT NULL AND repeat_type IS NULL)
+	),
+	CONSTRAINT ck_schedule_repeat_until CHECK (repeat_until IS NULL OR repeat_type IS NOT NULL)
 );
+
+-- 한 회차를 대신하는 행은 하나다. 취소한 회차(삭제 상태)도 포함해 겹치지 않는다.
+CREATE UNIQUE INDEX uk_schedule_recurring_schedule_id_original_start_at
+	ON planner.schedule (recurring_schedule_id, original_start_at)
+	WHERE recurring_schedule_id IS NOT NULL;
 
 CREATE INDEX idx_schedule_family_id ON planner.schedule (family_id);
 CREATE INDEX idx_schedule_creator_account_id ON planner.schedule (creator_account_id);

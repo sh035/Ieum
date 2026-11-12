@@ -11,6 +11,7 @@ import com.ieum.grpc.client.family.FamilyRole
 import com.ieum.planner.domain.entity.Schedule
 import com.ieum.planner.domain.entity.ScheduleAttendee
 import com.ieum.planner.domain.entity.Todo
+import com.ieum.planner.domain.enums.RepeatType
 import com.ieum.planner.domain.enums.TodoPriority
 import com.ieum.planner.domain.enums.Visibility
 import com.ieum.planner.repository.ScheduleAttendeeRepository
@@ -95,7 +96,8 @@ class DueSoonSchedulerTest @Autowired constructor(
 		todoChecklistItemRepository.deleteAll()
 		todoRepository.deleteAllInBatch()
 		scheduleAttendeeRepository.deleteAll()
-		scheduleRepository.deleteAll()
+		// 회차를 대신하는 행이 원본을 참조해서 한 문장으로 지운다.
+		scheduleRepository.deleteAllInBatch()
 		schedulerCheckpointRepository.deleteAll()
 		// ShedLock 은 한 번 만든 락 행을 기억하고 UPDATE 만 하므로, 행을 지우지 않고 만료만 시킨다.
 		shedlockRepository.saveAll(shedlockRepository.findAll().onEach { it.lockUntil = LocalDateTime.of(2000, 1, 1, 0, 0) })
@@ -231,6 +233,34 @@ class DueSoonSchedulerTest @Autowired constructor(
 		runAt(21, 0)
 
 		assertEquals(listOf("내일 자정 할 일", "오늘 밤 할 일"), alertedTitles().sorted())
+	}
+
+	@Test
+	fun `반복 일정은 시작 3시간 전이 된 회차마다 알리고 취소한 회차는 건너뛴다`() {
+		val weekly = schedule("주간 회의", today.minusWeeks(2).atTime(19, 0)).apply { repeatType = RepeatType.WEEKLY }.let(scheduleRepository::save)
+		val daily = schedule("매일 산책", today.minusDays(3).atTime(18, 55)).apply { repeatType = RepeatType.DAILY }.let(scheduleRepository::save)
+		scheduleRepository.save(
+			Schedule(
+				familyId = familyId,
+				creatorAccountId = mom,
+				title = "매일 산책",
+				memo = null,
+				visibility = Visibility.FAMILY,
+				isAllDay = false,
+				startAt = today.atTime(18, 55),
+				endAt = today.atTime(20, 55),
+				recurringScheduleId = daily.scheduleId,
+				originalStartAt = today.atTime(18, 55),
+			).apply { delete() },
+		)
+
+		runAt(16, 0)
+
+		assertEquals(listOf("주간 회의"), alertedTitles())
+		val event = events.stream(NotificationEvent::class.java).toList().single()
+		assertEquals(weekly.scheduleId, event.data.targetId)
+		assertEquals(today.atTime(19, 0), event.data.at)
+		assertEquals("SCHEDULE_STARTING_SOON:${weekly.scheduleId}:${today.atTime(19, 0)}", event.data.dedupKey)
 	}
 
 	@Test

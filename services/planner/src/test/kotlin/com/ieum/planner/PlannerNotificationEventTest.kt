@@ -62,7 +62,7 @@ class PlannerNotificationEventTest @Autowired constructor(
 		todoChecklistItemRepository.deleteAll()
 		todoRepository.deleteAllInBatch()
 		scheduleAttendeeRepository.deleteAll()
-		scheduleRepository.deleteAll()
+		scheduleRepository.deleteAllInBatch()
 		listOf(me, member, kid, newbie).forEach { `when`(familyClient.isMember(familyId, it)).thenReturn(true) }
 	}
 

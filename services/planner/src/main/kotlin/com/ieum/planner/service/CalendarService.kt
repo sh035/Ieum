@@ -24,8 +24,7 @@ class CalendarService(
 		if (to.isBefore(from)) {
 			throw IeumException(PlannerErrorCode.INVALID_DATE_RANGE)
 		}
-		// 월 보기 6주(42칸)까지 허용한다.
-		if (ChronoUnit.DAYS.between(from, to) >= MAX_RANGE_DAYS) {
+		if (ChronoUnit.DAYS.between(from, to) >= ScheduleService.MAX_RANGE_DAYS) {
 			throw IeumException(PlannerErrorCode.CALENDAR_RANGE_TOO_LONG)
 		}
 		val me = UUID.fromString(accountId)
@@ -35,9 +34,5 @@ class CalendarService(
 			todos = todoService.findTodosDueBetween(me, familyId, from, to),
 			schedules = scheduleService.findSchedules(me, familyId, from, to),
 		)
-	}
-
-	companion object {
-		private const val MAX_RANGE_DAYS = 42L
 	}
 }

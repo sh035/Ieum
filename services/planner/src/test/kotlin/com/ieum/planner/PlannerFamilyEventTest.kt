@@ -8,6 +8,7 @@ import com.ieum.planner.domain.entity.Schedule
 import com.ieum.planner.domain.entity.ScheduleAttendee
 import com.ieum.planner.domain.entity.Todo
 import com.ieum.planner.domain.entity.TodoChecklistItem
+import com.ieum.planner.domain.enums.RepeatType
 import com.ieum.planner.domain.enums.TodoPriority
 import com.ieum.planner.domain.enums.Visibility
 import com.ieum.planner.repository.ScheduleAttendeeRepository
@@ -149,6 +150,53 @@ class PlannerFamilyEventTest @Autowired constructor(
 		assertEquals(false, todoChecklistItemRepository.findById(checklistOfLeaversTodo).get().isDeleted)
 		assertEquals(listOf(true, false, false), listOf(leaversSchedule, stayersSchedule, leaversOtherHomeSchedule).map { scheduleDeleted(it) })
 		assertEquals(listOf(true, false), listOf(leaverAttending, stayerAttending).map { attendeeDeleted(it) })
+	}
+
+	@Test
+	fun `떠난 사람의 반복 일정은 따로 바꾼 회차와 함께 지운다`() {
+		val master = scheduleRepository.findById(schedule(home, leaver)).get().apply { repeatType = RepeatType.WEEKLY }.let(scheduleRepository::save)
+		val replaced = requireNotNull(
+			scheduleRepository.save(
+				Schedule(
+					familyId = home,
+					creatorAccountId = leaver,
+					title = "늦은 외식",
+					memo = null,
+					visibility = Visibility.FAMILY,
+					isAllDay = false,
+					startAt = LocalDateTime.of(2026, 11, 17, 19, 0),
+					endAt = LocalDateTime.of(2026, 11, 17, 21, 0),
+					recurringScheduleId = master.scheduleId,
+					originalStartAt = LocalDateTime.of(2026, 11, 17, 18, 0),
+				),
+			).scheduleId,
+		)
+
+		val leftAt = seoulNow()
+		// 떠난 뒤 이벤트가 오기 전에 다른 구성원이 바꾼 회차도 원본을 따라 지운다.
+		val replacedAfterLeaving = requireNotNull(
+			scheduleRepository.save(
+				Schedule(
+					familyId = home,
+					creatorAccountId = leaver,
+					title = "점심 외식",
+					memo = null,
+					visibility = Visibility.FAMILY,
+					isAllDay = false,
+					startAt = LocalDateTime.of(2026, 11, 24, 12, 0),
+					endAt = LocalDateTime.of(2026, 11, 24, 14, 0),
+					recurringScheduleId = master.scheduleId,
+					originalStartAt = LocalDateTime.of(2026, 11, 24, 18, 0),
+				),
+			).scheduleId,
+		)
+
+		send("FAMILY_MEMBER_LEFT", FamilyEventData(familyId = home, accountId = leaver), createdAt = leftAt)
+
+		assertEquals(
+			listOf(true, true, true),
+			listOf(requireNotNull(master.scheduleId), replaced, replacedAfterLeaving).map { scheduleDeleted(it) },
+		)
 	}
 
 	@Test

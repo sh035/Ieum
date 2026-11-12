@@ -62,7 +62,7 @@ class PlannerInternalGrpcControllerTest @Autowired constructor(
 		todoChecklistItemRepository.deleteAll()
 		todoRepository.deleteAllInBatch()
 		scheduleAttendeeRepository.deleteAll()
-		scheduleRepository.deleteAll()
+		scheduleRepository.deleteAllInBatch()
 		`when`(familyClient.getFamily(familyId)).thenReturn(
 			FamilyInfo(
 				"우리집",

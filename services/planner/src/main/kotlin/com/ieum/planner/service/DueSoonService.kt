@@ -29,6 +29,7 @@ class DueSoonService(
 	private val schedulerCheckpointService: SchedulerCheckpointService,
 	private val familyClient: FamilyClient,
 	private val clock: Clock,
+	private val expander: ScheduleOccurrenceExpander,
 ) {
 
 	// 마감 / 시작이 (앞 회차가 처리한 지점, 지금 + 3시간] 인 것을 알린다.
@@ -44,7 +45,14 @@ class DueSoonService(
 		val todos = todoRepository
 			.findAllByIsCompletedFalseAndIsDeletedFalseAndDueTimeIsNotNullAndDueDateBetween(windowStart.toLocalDate(), windowEnd.toLocalDate())
 			.filter { it.dueAt() > windowStart && it.dueAt() <= windowEnd }
-		val schedules = scheduleRepository.findAllByIsAllDayFalseAndIsDeletedFalseAndStartAtGreaterThanAndStartAtLessThanEqual(windowStart, windowEnd)
+		// 반복 일정은 구간 안에서 시작하는 회차마다 알린다.
+		val occurrences = expander.expand(
+			scheduleRepository.findAllByIsAllDayFalseAndIsDeletedFalseAndStartAtGreaterThanAndStartAtLessThanEqual(windowStart, windowEnd) +
+				scheduleRepository.findAllByRepeatTypeIsNotNullAndStartAtLessThanAndIsDeletedFalse(windowEnd.plusSeconds(1)).filterNot { it.isAllDay },
+			windowStart,
+			windowEnd.plusSeconds(1),
+		).filter { it.startAt > windowStart && it.startAt <= windowEnd }
+		val schedules = occurrences.map { it.schedule }.distinctBy { it.scheduleId }
 		val attendees = if (schedules.isEmpty()) {
 			emptyMap()
 		} else {
@@ -72,7 +80,8 @@ class DueSoonService(
 			)
 		}
 
-		schedules.forEach { schedule ->
+		occurrences.forEach { occurrence ->
+			val schedule = occurrence.schedule
 			notificationEventPublisher.publish(
 				NotificationEventType.SCHEDULE_STARTING_SOON,
 				NotificationEventData(
@@ -81,8 +90,8 @@ class DueSoonService(
 					targetType = NotificationTargetType.SCHEDULE,
 					targetId = schedule.scheduleId,
 					subject = schedule.title,
-					at = schedule.startAt,
-					dedupKey = "SCHEDULE_STARTING_SOON:${schedule.scheduleId}:${schedule.startAt}",
+					at = occurrence.startAt,
+					dedupKey = "SCHEDULE_STARTING_SOON:${schedule.scheduleId}:${occurrence.startAt}",
 				),
 			)
 		}

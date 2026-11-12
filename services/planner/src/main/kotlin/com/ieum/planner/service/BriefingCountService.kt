@@ -18,6 +18,7 @@ class BriefingCountService(
 	private val scheduleRepository: ScheduleRepository,
 	private val scheduleAttendeeRepository: ScheduleAttendeeRepository,
 	private val familyClient: FamilyClient,
+	private val expander: ScheduleOccurrenceExpander,
 ) {
 
 	// 할 일은 담당자와 만든 사람 모두의 "내 것"이고, 일정은 참석자의 것이다.
@@ -25,10 +26,15 @@ class BriefingCountService(
 	@Transactional(readOnly = true)
 	fun countsOn(date: LocalDate): Map<UUID, BriefingCountResponse> {
 		val todos = todoRepository.findAllByIsCompletedFalseAndIsDeletedFalseAndDueDateLessThanEqual(date)
-		val schedules = scheduleRepository.findAllByStartAtLessThanAndEndAtGreaterThanEqualAndIsDeletedFalse(
-			date.plusDays(1).atStartOfDay(),
-			date.atStartOfDay(),
-		).filterNot { it.endsBefore(date.atStartOfDay()) }
+		val dayStart = date.atStartOfDay()
+		val dayEnd = date.plusDays(1).atStartOfDay()
+		val occurrences = expander.expand(
+			scheduleRepository.findAllByStartAtLessThanAndEndAtGreaterThanEqualAndIsDeletedFalse(dayEnd, dayStart) +
+				scheduleRepository.findAllByRepeatTypeIsNotNullAndStartAtLessThanAndIsDeletedFalse(dayEnd),
+			dayStart,
+			dayEnd,
+		)
+		val schedules = occurrences.map { it.schedule }.distinctBy { it.scheduleId }
 		val members = familyClient.getMembersOf((todos.map { it.familyId } + schedules.map { it.familyId }).filterNotNull())
 
 		val counts = mutableMapOf<UUID, BriefingCountResponse>()
@@ -46,8 +52,13 @@ class BriefingCountService(
 
 		if (schedules.isNotEmpty()) {
 			val familyIds = schedules.associate { it.scheduleId to it.familyId }
+			// 반복 일정은 그날 걸친 회차 수만큼 센다.
+			val occurrenceCounts = occurrences.groupingBy { it.schedule.scheduleId }.eachCount()
 			scheduleAttendeeRepository.findAllByScheduleIdInAndIsDeletedFalse(schedules.map { requireNotNull(it.scheduleId) })
-				.forEach { attendee -> add(familyIds[attendee.scheduleId], attendee.accountId) { it.copy(schedule = it.schedule + 1) } }
+				.forEach { attendee ->
+					val count = occurrenceCounts[attendee.scheduleId] ?: 0
+					add(familyIds[attendee.scheduleId], attendee.accountId) { it.copy(schedule = it.schedule + count) }
+				}
 		}
 
 		return counts
