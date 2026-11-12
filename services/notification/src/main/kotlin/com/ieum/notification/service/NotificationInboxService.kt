@@ -53,15 +53,17 @@ class NotificationInboxService(
 		notificationRepository.save(notification)
 	}
 
-	// 한 번의 UPDATE 로 처리해서 엔티티 @PreUpdate 를 거치지 않으니 updatedAt 을 직접 넣는다.
+	// 한 번의 UPDATE 로 처리해서 엔티티 @PreUpdate 를 거치지 않으니 수정 시각과 수정자를 직접 넣는다.
 	@Transactional
 	fun readAll(accountId: String, tab: NotificationTab, familyId: UUID?) {
-		val where = inTab(UUID.fromString(accountId), tab, familyId).and(unread())
+		val me = UUID.fromString(accountId)
+		val where = inTab(me, tab, familyId).and(unread())
 
 		notificationRepository.update(
 			UpdateSpecification.update<Notification> { _, update, _ ->
 				update.set("isRead", true)
 				update.set("updatedAt", LocalDateTime.now())
+				update.set("updatedBy", me)
 			}.where(where),
 		)
 	}
