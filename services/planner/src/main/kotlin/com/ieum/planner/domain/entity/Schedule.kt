@@ -62,15 +62,12 @@ class Schedule(
 	val scheduleId: UUID? = null,
 ) : BaseEntity() {
 
-	// 구글 / 애플 캘린더처럼 시각 일정의 끝 시각은 포함하지 않는다. 자정에 끝나는 일정은 전날 일정이다.
-	fun endsBefore(rangeStart: LocalDateTime) = endsBefore(startAt, endAt, rangeStart)
-
 	// [rangeStart, rangeEnd) 와 겹치는 회차의 시작들이다. 반복 원본이 아니면 자기 자신 하나를 본다.
 	fun occurrenceStartsIn(rangeStart: LocalDateTime, rangeEnd: LocalDateTime): List<LocalDateTime> {
 		val type = repeatType ?: return listOf(startAt).filter { overlaps(it, rangeStart, rangeEnd) }
 		val length = Duration.between(startAt, endAt)
-		// 기간 앞쪽 회차를 하나씩 세지 않도록 기간 시작 근처에서 시작한다. 단위 계산이 한 칸 늦을 수 있어 한 칸 앞에서 본다.
-		var index = maxOf(0L, unitsBetween(type, startAt, rangeStart.minus(length)) - 1)
+		// 앞쪽 회차를 하나씩 세지 않게 기간 시작 근처부터 본다. 월 계산은 말일 보정 때 적게 셀 뿐이라 건너뛰는 회차가 없다.
+		var index = maxOf(0L, unitsBetween(type, startAt, rangeStart.minus(length)))
 		val starts = mutableListOf<LocalDateTime>()
 		while (true) {
 			val start = type.occurrence(startAt, index)
@@ -93,6 +90,7 @@ class Schedule(
 		return start < rangeEnd && end >= rangeStart && !endsBefore(start, end, rangeStart)
 	}
 
+	// 구글 / 애플 캘린더처럼 시각 일정의 끝 시각은 포함하지 않는다. 자정에 끝나는 일정은 전날 일정이다.
 	private fun endsBefore(start: LocalDateTime, end: LocalDateTime, rangeStart: LocalDateTime) = !isAllDay && start < rangeStart && end <= rangeStart
 
 	private fun unitsBetween(type: RepeatType, from: LocalDateTime, to: LocalDateTime): Long = when (type) {

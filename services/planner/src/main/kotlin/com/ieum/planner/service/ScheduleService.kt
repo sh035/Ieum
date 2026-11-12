@@ -20,10 +20,12 @@ import com.ieum.planner.repository.ScheduleRepository
 import com.ieum.planner.service.ScheduleOccurrenceExpander.Occurrence
 import com.ieum.web.exception.IeumException
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Service
@@ -85,6 +87,10 @@ class ScheduleService(
 		if (to.isBefore(from)) {
 			throw IeumException(PlannerErrorCode.INVALID_DATE_RANGE)
 		}
+		// 끝없는 반복을 펼치므로 캘린더와 같은 상한을 둔다.
+		if (ChronoUnit.DAYS.between(from, to) >= MAX_RANGE_DAYS) {
+			throw IeumException(PlannerErrorCode.CALENDAR_RANGE_TOO_LONG)
+		}
 		val me = UUID.fromString(accountId)
 		familyId?.let { familyClient.requireMember(it, me, PlannerErrorCode.FAMILY_NOT_FOUND) }
 
@@ -134,6 +140,7 @@ class ScheduleService(
 				Occurrence(schedule, start, schedule.occurrenceEnd(start))
 			}
 			occurrenceStartAt == null || occurrenceStartAt == schedule.originalStartAt -> Occurrence(schedule, schedule.startAt, schedule.endAt)
+			schedule.originalStartAt != null -> throw IeumException(PlannerErrorCode.SCHEDULE_NOT_FOUND)
 			else -> throw IeumException(PlannerErrorCode.OCCURRENCE_NOT_RECURRING)
 		}
 		return toResponses(listOf(occurrence)).single()
@@ -152,7 +159,7 @@ class ScheduleService(
 
 		return when (val target = resolveTarget(me, scheduleId, occurrenceStartAt, scope)) {
 			is Target.Row -> {
-				if (target.schedule.recurringScheduleId != null && request.repeatType != null) {
+				if (target.schedule.recurringScheduleId != null && (request.repeatType != null || request.repeatUntil != null)) {
 					throw IeumException(PlannerErrorCode.REPEAT_CHANGE_NEEDS_FOLLOWING)
 				}
 				checkRepeat(request.repeatType, request.repeatUntil, startAt)
@@ -186,7 +193,7 @@ class ScheduleService(
 				val master = target.master
 				val canceled = occurrenceRow(master, target.startAt, master.title, master.memo, master.isAllDay, target.startAt, master.occurrenceEnd(target.startAt))
 				canceled.delete()
-				scheduleRepository.save(canceled)
+				saveReplacement(canceled)
 				notifyCurrentMembers(NotificationEventType.SCHEDULE_CANCELED, canceled, attendeeIdsOf(master), actor = me)
 			}
 			is Target.Following -> {
@@ -242,7 +249,14 @@ class ScheduleService(
 		return Target.Following(master, originalStartAt)
 	}
 
-	private fun updateRow(me: UUID, schedule: Schedule, request: UpdateScheduleRequest, startAt: LocalDateTime, endAt: LocalDateTime): ScheduleResponse {
+	private fun updateRow(
+		me: UUID,
+		schedule: Schedule,
+		request: UpdateScheduleRequest,
+		startAt: LocalDateTime,
+		endAt: LocalDateTime,
+		notifyAttendees: Boolean = true,
+	): ScheduleResponse {
 		val scheduleId = requireNotNull(schedule.scheduleId)
 		val current = scheduleAttendeeRepository.findAllByScheduleIdInAndIsDeletedFalse(listOf(scheduleId))
 		val currentIds = current.map { it.accountId }.toSet()
@@ -265,7 +279,9 @@ class ScheduleService(
 		scheduleAttendeeRepository.saveAll(
 			(attendees - currentIds).map { ScheduleAttendee(scheduleId = scheduleId, accountId = it) },
 		)
-		notifyChanges(me, schedule, currentIds, attendees, changed)
+		if (notifyAttendees) {
+			notifyChanges(me, schedule, currentIds, attendees, changed)
+		}
 
 		return toResponses(listOf(Occurrence(schedule, startAt, endAt))).single()
 	}
@@ -283,15 +299,14 @@ class ScheduleService(
 		val attendees = resolveAttendees(master.familyId, me, request.attendeeAccountIds, currentIds)
 		val changed = isChanged(master.title, master.isAllDay, occurrenceStartAt, master.occurrenceEnd(occurrenceStartAt), request, startAt, endAt)
 
-		val replacement = scheduleRepository.save(occurrenceRow(master, occurrenceStartAt, request.title, request.memo, request.isAllDay, startAt, endAt))
+		val replacement = saveReplacement(occurrenceRow(master, occurrenceStartAt, request.title, request.memo, request.isAllDay, startAt, endAt))
 		scheduleAttendeeRepository.saveAll(attendees.map { ScheduleAttendee(scheduleId = requireNotNull(replacement.scheduleId), accountId = it) })
 		notifyChanges(me, replacement, currentIds, attendees, changed)
 
 		return toResponses(listOf(Occurrence(replacement, startAt, endAt))).single()
 	}
 
-	// 그 회차부터 끝까지 바꾼다. 원본은 그 회차 전날로 끝내고 그 회차부터 새로 만든다.
-	// 첫 회차부터 바꾸는데 반복 규칙과 시작이 그대로면 원본을 고쳐 따로 바꾼 회차를 살린다.
+	// 그 회차 전날로 원본을 끝내고 새로 만든다. 첫 회차부터인데 규칙과 시작이 그대로면 원본만 고쳐 따로 바꾼 회차를 살린다.
 	private fun updateFollowing(
 		me: UUID,
 		master: Schedule,
@@ -301,6 +316,10 @@ class ScheduleService(
 		endAt: LocalDateTime,
 	): ScheduleResponse {
 		if (occurrenceStartAt == master.startAt && startAt == master.startAt && request.repeatType == master.repeatType) {
+			// 고른 첫 회차를 대신하는 행이 있으면 같은 내용으로 맞춘다. 지우면 그 회차가 취소되므로 고친다. 알림은 원본에서 한 번만 간다.
+			scheduleRepository.findByRecurringScheduleIdAndOriginalStartAt(requireNotNull(master.scheduleId), occurrenceStartAt)
+				?.takeUnless { it.isDeleted }
+				?.let { updateRow(me, it, request.copy(repeatType = null, repeatUntil = null), startAt, endAt, notifyAttendees = false) }
 			return updateRow(me, master, request, startAt, endAt)
 		}
 
@@ -349,6 +368,14 @@ class ScheduleService(
 				scheduleRepository.save(it)
 			}
 	}
+
+	// 같은 회차를 동시에 바꾸면 unique index 에 걸린다. 트랜잭션 안이라 바로 flush 해야 여기서 잡힌다.
+	private fun saveReplacement(replacement: Schedule): Schedule =
+		try {
+			scheduleRepository.saveAndFlush(replacement)
+		} catch (e: DataIntegrityViolationException) {
+			throw IeumException(PlannerErrorCode.OCCURRENCE_CHANGED_CONCURRENTLY)
+		}
 
 	// 회차를 대신하는 행은 원본의 가족 / 공개 범위 / 만든 사람을 물려받아 가족 이벤트 정리 규칙도 같다.
 	private fun occurrenceRow(
@@ -534,4 +561,9 @@ class ScheduleService(
 		recurringScheduleId = schedule.recurringScheduleId,
 		occurrenceStartAt = if (schedule.repeatType != null) startAt else schedule.originalStartAt,
 	)
+
+	companion object {
+		// 월 보기 6주(42칸)까지다. 캘린더도 같은 값을 쓴다.
+		const val MAX_RANGE_DAYS = 42L
+	}
 }

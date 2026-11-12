@@ -8,8 +8,8 @@ import com.ieum.planner.domain.entity.Schedule
 import com.ieum.planner.domain.entity.ScheduleAttendee
 import com.ieum.planner.domain.entity.Todo
 import com.ieum.planner.domain.entity.TodoChecklistItem
-import com.ieum.planner.domain.enums.TodoPriority
 import com.ieum.planner.domain.enums.RepeatType
+import com.ieum.planner.domain.enums.TodoPriority
 import com.ieum.planner.domain.enums.Visibility
 import com.ieum.planner.repository.ScheduleAttendeeRepository
 import com.ieum.planner.repository.ScheduleRepository
@@ -172,9 +172,31 @@ class PlannerFamilyEventTest @Autowired constructor(
 			).scheduleId,
 		)
 
-		send("FAMILY_MEMBER_LEFT", FamilyEventData(familyId = home, accountId = leaver))
+		val leftAt = seoulNow()
+		// 떠난 뒤 이벤트가 오기 전에 다른 구성원이 바꾼 회차도 원본을 따라 지운다.
+		val replacedAfterLeaving = requireNotNull(
+			scheduleRepository.save(
+				Schedule(
+					familyId = home,
+					creatorAccountId = leaver,
+					title = "점심 외식",
+					memo = null,
+					visibility = Visibility.FAMILY,
+					isAllDay = false,
+					startAt = LocalDateTime.of(2026, 11, 24, 12, 0),
+					endAt = LocalDateTime.of(2026, 11, 24, 14, 0),
+					recurringScheduleId = master.scheduleId,
+					originalStartAt = LocalDateTime.of(2026, 11, 24, 18, 0),
+				),
+			).scheduleId,
+		)
 
-		assertEquals(listOf(true, true), listOf(requireNotNull(master.scheduleId), replaced).map { scheduleDeleted(it) })
+		send("FAMILY_MEMBER_LEFT", FamilyEventData(familyId = home, accountId = leaver), createdAt = leftAt)
+
+		assertEquals(
+			listOf(true, true, true),
+			listOf(requireNotNull(master.scheduleId), replaced, replacedAfterLeaving).map { scheduleDeleted(it) },
+		)
 	}
 
 	@Test

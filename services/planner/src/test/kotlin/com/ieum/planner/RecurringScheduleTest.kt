@@ -157,8 +157,8 @@ class RecurringScheduleTest @Autowired constructor(
 	@Test
 	fun `이후 모두 고치면 그 회차부터 새 반복이 되고 앞 회차는 그대로다`() {
 		val id = createId()
+		// 이 일정만 고칠 때는 반복을 바꿀 수 없다.
 		update(id, body("저녁 산책", "2026-12-05T18:00:00", "2026-12-05T20:00:00", repeat = "WEEKLY", withVisibility = false), "2026-11-15T18:00:00", "THIS")
-		update(id, body("늦은 식사", "2026-12-06T19:00:00", "2026-12-06T21:00:00", repeat = "WEEKLY", withVisibility = false))
 			.andExpect { status { isBadRequest() } }
 
 		val following = data(
@@ -195,13 +195,84 @@ class RecurringScheduleTest @Autowired constructor(
 	}
 
 	@Test
+	fun `첫 회차를 따로 바꾼 뒤 그 회차에서 이후 모두를 고치면 그 회차도 같은 내용이 된다`() {
+		val id = createId()
+		val replacedId = data(
+			update(id, body("늦은 식사", repeat = null, withVisibility = false), "2026-11-15T18:00:00", "THIS"),
+		).get("scheduleId").asString()
+
+		update(replacedId, body("저녁 식사", withVisibility = false), scope = "FOLLOWING").andExpect { status { isOk() } }
+
+		assertEquals(
+			mapOf("2026-11-15T18:00:00" to "저녁 식사", "2026-11-22T18:00:00" to "저녁 식사"),
+			titles("2026-11-15", "2026-11-22"),
+		)
+	}
+
+	@Test
+	fun `첫 회차부터 시작이나 반복을 바꾸면 새 반복으로 바꾸고 따로 바꾼 회차는 사라진다`() {
+		val id = createId()
+		update(id, body("늦은 식사", "2026-11-22T19:00:00", "2026-11-22T21:00:00", repeat = null, withVisibility = false), "2026-11-22T18:00:00", "THIS")
+
+		val replaced = data(
+			update(id, body("아침 식사", "2026-11-15T08:00:00", "2026-11-15T09:00:00", repeat = "DAILY", until = "2026-11-17", withVisibility = false), "2026-11-15T18:00:00", "FOLLOWING")
+				.andExpect { status { isOk() } },
+		)
+
+		assertEquals(true, replaced.get("scheduleId").asString() != id)
+		assertEquals(
+			mapOf("2026-11-15T08:00:00" to "아침 식사", "2026-11-16T08:00:00" to "아침 식사", "2026-11-17T08:00:00" to "아침 식사"),
+			titles("2026-11-14", "2026-11-30"),
+		)
+	}
+
+	@Test
+	fun `회차 상세는 그 회차의 시작과 끝을 돌려준다`() {
+		val id = createId()
+
+		mockMvc.get("/api/v1/schedule/$id") {
+			header("Authorization", "Bearer ${accessToken(me)}")
+			param("occurrenceStartAt", "2026-12-06T18:00:00")
+		}.andExpect {
+			status { isOk() }
+			jsonPath("\$.data.scheduleId") { value(id) }
+			jsonPath("\$.data.startAt") { value("2026-12-06T18:00:00") }
+			jsonPath("\$.data.endAt") { value("2026-12-06T20:00:00") }
+			jsonPath("\$.data.occurrenceStartAt") { value("2026-12-06T18:00:00") }
+		}
+	}
+
+	@Test
+	fun `일정 목록은 42일보다 긴 기간이면 400`() {
+		createId()
+
+		mockMvc.get("/api/v1/schedule") {
+			header("Authorization", "Bearer ${accessToken(me)}")
+			param("from", "2026-01-01")
+			param("to", "9999-12-31")
+		}.andExpect { status { isBadRequest() } }
+	}
+
+	@Test
+	fun `오늘 브리핑에 오늘 회차가 나온다`() {
+		val today = LocalDate.now()
+		createId(body(startAt = "${today.minusDays(3)}T07:00:00", endAt = "${today.minusDays(3)}T08:00:00", repeat = "DAILY"))
+
+		mockMvc.get("/api/v1/daily-briefing") { header("Authorization", "Bearer ${accessToken(me)}") }.andExpect {
+			status { isOk() }
+			jsonPath("\$.data.schedules.length()") { value(1) }
+			jsonPath("\$.data.schedules[0].startAt") { value("${today}T07:00:00") }
+		}
+	}
+
+	@Test
 	fun `종료일을 앞당기면 그 뒤에 따로 바꾼 회차도 사라진다`() {
 		val id = createId()
 		update(id, body("늦은 식사", "2026-11-29T19:00:00", "2026-11-29T21:00:00", repeat = null, withVisibility = false), "2026-11-29T18:00:00", "THIS")
 
 		update(id, body(until = "2026-11-22", withVisibility = false), "2026-11-15T18:00:00", "FOLLOWING").andExpect { status { isOk() } }
 
-		assertEquals(setOf("2026-11-15T18:00:00", "2026-11-22T18:00:00"), titles("2026-11-15", "2026-12-31").keys)
+		assertEquals(setOf("2026-11-15T18:00:00", "2026-11-22T18:00:00"), titles("2026-11-15", "2026-12-20").keys)
 	}
 
 	@Test
@@ -213,7 +284,7 @@ class RecurringScheduleTest @Autowired constructor(
 
 		delete(replacedId, scope = "FOLLOWING").andExpect { status { isNoContent() } }
 
-		assertEquals(setOf("2026-11-15T18:00:00"), titles("2026-11-15", "2026-12-31").keys)
+		assertEquals(setOf("2026-11-15T18:00:00"), titles("2026-11-15", "2026-12-20").keys)
 	}
 
 	@Test

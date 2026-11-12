@@ -48,9 +48,9 @@ class DueSoonService(
 		// 반복 일정은 구간 안에서 시작하는 회차마다 알린다.
 		val occurrences = expander.expand(
 			scheduleRepository.findAllByIsAllDayFalseAndIsDeletedFalseAndStartAtGreaterThanAndStartAtLessThanEqual(windowStart, windowEnd) +
-				scheduleRepository.findAllByRepeatTypeIsNotNullAndStartAtLessThanAndIsDeletedFalse(windowEnd.plusNanos(1)).filterNot { it.isAllDay },
+				scheduleRepository.findAllByRepeatTypeIsNotNullAndStartAtLessThanAndIsDeletedFalse(windowEnd.plusSeconds(1)).filterNot { it.isAllDay },
 			windowStart,
-			windowEnd.plusNanos(1),
+			windowEnd.plusSeconds(1),
 		).filter { it.startAt > windowStart && it.startAt <= windowEnd }
 		val schedules = occurrences.map { it.schedule }.distinctBy { it.scheduleId }
 		val attendees = if (schedules.isEmpty()) {

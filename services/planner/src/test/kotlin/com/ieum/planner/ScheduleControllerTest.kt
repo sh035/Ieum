@@ -45,7 +45,7 @@ class ScheduleControllerTest @Autowired constructor(
 	@BeforeEach
 	fun setUp() {
 		scheduleAttendeeRepository.deleteAll()
-		scheduleRepository.deleteAll()
+		scheduleRepository.deleteAllInBatch()
 		listOf(me, member, member2).forEach { `when`(familyClient.isMember(familyId, it)).thenReturn(true) }
 		// eq() 는 matcher 를 등록하고 null 을 돌려줘서 Kotlin non-null 인자에 그대로 넣을 수 없다.
 		`when`(familyClient.getRoles(eq(familyId) ?: familyId, anyCollection())).thenAnswer { invocation ->

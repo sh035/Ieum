@@ -27,6 +27,7 @@ enum class PlannerErrorCode(
 	OCCURRENCE_REQUIRED(HttpStatus.BAD_REQUEST, "Recurring schedule needs occurrenceStartAt and scope."),
 	OCCURRENCE_NOT_RECURRING(HttpStatus.BAD_REQUEST, "occurrenceStartAt and scope are only for recurring schedules."),
 	REPEAT_CHANGE_NEEDS_FOLLOWING(HttpStatus.BAD_REQUEST, "Repeat can only change for this and following occurrences."),
+	OCCURRENCE_CHANGED_CONCURRENTLY(HttpStatus.CONFLICT, "This occurrence was changed at the same time. Reload and try again."),
 	INVALID_DATE_RANGE(HttpStatus.BAD_REQUEST, "Range must not end before it starts."),
-	CALENDAR_RANGE_TOO_LONG(HttpStatus.BAD_REQUEST, "Calendar range must be 42 days or less."),
+	CALENDAR_RANGE_TOO_LONG(HttpStatus.BAD_REQUEST, "Range must be 42 days or less."),
 }

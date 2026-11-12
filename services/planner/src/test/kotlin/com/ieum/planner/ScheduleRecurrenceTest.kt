@@ -67,6 +67,13 @@ class ScheduleRecurrenceTest {
 	}
 
 	@Test
+	fun `매월 31일 반복을 먼 미래의 2월 기간으로 보면 그달 말일 회차를 준다`() {
+		val monthly = schedule(at("2026-01-31", "09:00"), repeatType = RepeatType.MONTHLY)
+
+		assertEquals(listOf(at("2027-02-28", "09:00")), monthly.occurrenceStartsIn(day("2027-02-01"), day("2027-03-01")))
+	}
+
+	@Test
 	fun `종료일 당일 회차까지 포함한다`() {
 		val daily = schedule(at("2026-11-12", "07:00"), repeatType = RepeatType.DAILY, until = LocalDate.parse("2026-11-14"))
 

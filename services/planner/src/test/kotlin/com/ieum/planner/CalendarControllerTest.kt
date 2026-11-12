@@ -42,7 +42,7 @@ class CalendarControllerTest @Autowired constructor(
 		todoChecklistItemRepository.deleteAll()
 		todoRepository.deleteAllInBatch()
 		scheduleAttendeeRepository.deleteAll()
-		scheduleRepository.deleteAll()
+		scheduleRepository.deleteAllInBatch()
 		`when`(familyClient.isMember(familyId, me)).thenReturn(true)
 	}
 

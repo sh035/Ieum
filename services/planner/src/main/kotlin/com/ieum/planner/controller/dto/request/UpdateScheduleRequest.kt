@@ -7,7 +7,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
 
-// 수정 가능한 필드를 모두 받는다. 참석자는 보낸 목록으로 교체한다. 반복은 이후 모두를 고칠 때만 바꿀 수 있다.
+// 수정 가능한 필드를 모두 받는다. 참석자는 보낸 목록으로 교체한다. 반복 일정의 반복 규칙은 이후 모두를 고칠 때만 바꾼다.
 data class UpdateScheduleRequest(
 	@field:NotBlank
 	@field:Size(max = 255)

@@ -40,6 +40,9 @@ class FamilyEventService(
 		val schedules = scheduleRepository.findAllByFamilyIdAndIsDeletedFalse(familyId)
 		val leaversSchedules = schedules.filter { it.creatorAccountId == accountId && !it.createdAt.isAfter(leftAt) }
 		leaversSchedules.forEach { it.delete() }
+		// 반복의 회차를 대신하는 행은 만든 시각과 상관없이 원본을 따라 지운다. 원본 없이 남으면 단독 일정처럼 보인다.
+		val deletedIds = leaversSchedules.map { it.scheduleId }.toSet()
+		schedules.filter { it.recurringScheduleId in deletedIds }.forEach { it.delete() }
 		val attendees = if (schedules.isEmpty()) {
 			emptyList()
 		} else {
