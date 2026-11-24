@@ -1,0 +1,64 @@
+# Harbor chart 1.19.4 (Harbor 2.15.4), https://helm.goharbor.io
+# 비밀값 (관리자 비밀번호, secretKey, DB 비밀번호) 은 이 파일에 넣지 않고 설치 때 별도 values 파일로 전달
+
+expose:
+  type: nodePort
+  tls:
+    enabled: true
+    certSource: secret
+    secret:
+      secretName: harbor-tls # 자체 CA 로 서명한 인증서, SAN = 192.168.219.101, 192.168.219.102
+  nodePort:
+    ports:
+      http:
+        nodePort: 30002
+      https:
+        nodePort: 30003
+
+externalURL: https://192.168.219.102:30003
+
+# 웹 화면의 CA 인증서 다운로드 링크용 (harbor-tls 의 ca.crt)
+caSecretName: harbor-tls
+
+persistence:
+  enabled: true
+  resourcePolicy: keep
+  persistentVolumeClaim:
+    registry:
+      size: 20Gi
+    jobservice:
+      jobLog:
+        size: 1Gi
+    database:
+      size: 2Gi
+    redis:
+      size: 1Gi
+
+# 메모리 절약, 필요해지면 켬
+trivy:
+  enabled: false
+
+# local-path 데이터가 worker 에 묶이므로 모든 구성 요소를 worker 에 고정
+nginx:
+  nodeSelector:
+    kubernetes.io/hostname: k8s-worker-01
+portal:
+  nodeSelector:
+    kubernetes.io/hostname: k8s-worker-01
+core:
+  nodeSelector:
+    kubernetes.io/hostname: k8s-worker-01
+jobservice:
+  nodeSelector:
+    kubernetes.io/hostname: k8s-worker-01
+registry:
+  nodeSelector:
+    kubernetes.io/hostname: k8s-worker-01
+database:
+  internal:
+    nodeSelector:
+      kubernetes.io/hostname: k8s-worker-01
+redis:
+  internal:
+    nodeSelector:
+      kubernetes.io/hostname: k8s-worker-01
