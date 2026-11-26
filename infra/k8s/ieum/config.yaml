@@ -1,0 +1,16 @@
+# 서비스 공용 설정 (비밀값 아님). 비밀값은 Secret ieum-common / account-jwt (Git 밖에서 생성)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ieum-common
+  namespace: ieum
+data:
+  SPRING_PROFILES_ACTIVE: prod
+  DB_URL: jdbc:postgresql://192.168.219.103:5432/ieum
+  REDIS_HOST: redis.ieum.svc.cluster.local
+  REDIS_PORT: '6379'
+  KAFKA_BOOTSTRAP_SERVERS: kafka-0.kafka.ieum.svc.cluster.local:9092
+  ACCOUNT_GRPC_TARGET: account.ieum.svc.cluster.local:9081
+  FAMILY_GRPC_TARGET: family.ieum.svc.cluster.local:9082
+  PLANNER_GRPC_TARGET: planner.ieum.svc.cluster.local:9083
+  GROCERY_GRPC_TARGET: grocery.ieum.svc.cluster.local:9084
